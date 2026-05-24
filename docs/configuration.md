@@ -97,17 +97,34 @@ path = "/hook"
 
 ## LLM 配置
 
-全新 Mac 上推荐两种方式之一：
+全新 Mac 上推荐按 bootstrap 提示选择：
 
-1. 使用 Claude Code 自带登录。安装器结束后运行 `claude`，按官方流程登录。
-2. 在安装器里输入 `ANTHROPIC_API_KEY`。脚本会把 Provider 写入本机 `~/.cc-connect/config.toml`，并在项目里引用该 Provider。
+1. 使用 Claude Code 自带登录。安装器会在家庭助手工作目录中启动 `claude`，按官方流程完成登录和信任工作目录。
+2. 在安装器里输入 `ANTHROPIC_API_KEY`。脚本会把 `anthropic` Provider 写入本机 `~/.cc-connect/config.toml`，并在项目里引用该 Provider。
+3. 在安装器里输入 `OPENAI_API_KEY`。脚本会把 `openai` Provider 写入本机配置，并允许设置 `base_url` 和 `model`。
+4. 使用自定义 OpenAI-compatible Provider。脚本会询问 Provider 名称、API Key、`base_url` 和 `model`。
+
+示例：
+
+```toml
+[[providers]]
+name = "openai"
+api_key = "sk-..."
+base_url = "https://api.openai.com/v1"
+model = "gpt-4.1"
+agent_types = ["claudecode"]
+
+[projects.agent.options]
+provider = "openai"
+provider_refs = ["openai"]
+```
 
 不要把生成后的 `~/.cc-connect/config.toml` 提交到 GitHub。
 
 ## 启动服务
 
 ```bash
-cc-connect daemon install --config ~/.cc-connect/config.toml
+cc-connect daemon install --config ~/.cc-connect/config.toml --force
 cc-connect daemon start
 cc-connect daemon logs -f
 ```

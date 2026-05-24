@@ -2,11 +2,11 @@
 
 目标：一台全新 Mac 获取本仓库或 Release 二进制后，运行 Go 引导程序，按提示完成基础依赖、cc-connect、运行时 Agent、LLM 配置和微信个人号绑定。
 
-配置模板和工作区模板已经通过 Go `embed` 打进二进制。Release 场景只需要下载并运行一个 `cc-home` 文件。
+配置模板和工作区模板已经通过 Go `embed` 打进二进制。Release 场景只需要下载并运行一个 `home-agent-bootstrap` 文件。
 
 ## 安装器会处理什么
 
-`cc-home bootstrap` 会依次引导：
+`home-agent-bootstrap bootstrap` 会依次引导：
 
 1. 检查并安装 Xcode Command Line Tools。
 2. 检查并安装 Homebrew。
@@ -14,12 +14,14 @@
 4. 使用 npm 安装 `cc-connect`。
 5. 按选择安装 `Claude Code` 或 `Cursor Agent`。
 6. 引导配置 LLM：
-   - Claude Code 登录。
-   - 或 Anthropic API Key 写入本机 `config.toml`。
+   - 在家庭助手工作目录启动 Claude Code，完成登录和信任工作目录。
+   - 或把 Anthropic、OpenAI、自定义 OpenAI-compatible Provider 写入本机 `config.toml`。
 7. 生成 `~/.cc-connect/config.toml`。
 8. 创建家庭助手工作目录。
 9. 写入 `HOME.md`、`HEARTBEAT.md`、`CLAUDE.md`。
 10. 按数量生成多个微信个人号平台块。
+11. 默认立即逐个扫码绑定微信个人号。
+12. 扫码后自动把第一个已回填的 `allow_from` 写入 `projects.users.roles.admin.user_ids`。
 
 ## 执行
 
@@ -30,8 +32,8 @@ go run . bootstrap
 或先构建本地二进制：
 
 ```bash
-go build -o cc-home .
-./cc-home bootstrap
+go build -o home-agent-bootstrap .
+./home-agent-bootstrap bootstrap
 ```
 
 如果你已经装好 Homebrew、Node.js/npm、ffmpeg 等依赖，可以跳过系统依赖安装：
@@ -54,8 +56,10 @@ mode = "default"
 
 LLM 配置有两种方式：
 
-- 使用 `claude` 交互式登录，适合个人订阅或 Claude Code 常规使用。
+- 使用 `claude` 交互式登录，适合个人订阅或 Claude Code 常规使用。安装器会在家庭助手工作目录中启动 `claude`，让登录和信任工作目录一次完成。
 - 输入 `ANTHROPIC_API_KEY`，安装器会写入本机 `~/.cc-connect/config.toml` 的 `[[providers]]`。
+- 输入 `OPENAI_API_KEY`，安装器会写入 `openai` Provider，可指定 `base_url` 和 `model`。
+- 输入自定义 OpenAI-compatible Provider，可指定 Provider 名称、API Key、`base_url` 和 `model`。
 
 不要把生成后的 `config.toml` 提交到 GitHub。
 
@@ -72,13 +76,21 @@ mode = "ask"
 
 ## 微信绑定
 
-安装器只生成平台块，不会自动扫码。生成配置后执行：
+bootstrap 默认会在生成配置后立即逐个扫码绑定微信个人号：
+
+```bash
+go run . bootstrap
+```
+
+如果当时跳过扫码，之后仍可执行：
 
 ```bash
 go run . setup-weixin 2
 ```
 
-其中 `2` 是微信个人号数量。
+其中 `2` 是微信个人号数量。扫码完成后，安装器会优先读取配置中第一个已回填的 `allow_from`，并写入 `projects.users.roles.admin.user_ids`。如果没有读取到，会提示手动输入管理员微信 ilink `user_id`；继续留空时会省略 admin role，避免生成 `user_ids = []` 的无效配置。
+
+扫码绑定后，请用每个已绑定微信号先给机器人发送 `/login`。完成登录后，再发送普通消息或 `/whoami`，cc-connect 才能缓存 `context_token` 并正常回复。
 
 ## 启动服务
 

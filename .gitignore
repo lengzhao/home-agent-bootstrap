@@ -54,5 +54,5 @@ audit/
 .tmp-*/
 
 # Go build outputs
-cc-home
+home-agent-bootstrap
 coverage.out

@@ -18,7 +18,7 @@ import (
 	"text/template"
 )
 
-const appName = "cc-home"
+const appName = "home-agent-bootstrap"
 
 //go:embed workspace templates/config.generated.toml.tmpl
 var workspaceTemplates embed.FS
@@ -41,6 +41,8 @@ type RenderConfigInput struct {
 	AdminFrom       string
 	ProviderName    string
 	ProviderAPIKey  string
+	ProviderBaseURL string
+	ProviderModel   string
 	WeixinAccounts  []WeixinAccount
 }
 
@@ -129,6 +131,7 @@ func runBootstrap() error {
 		agentType = "cursor"
 		agentMode = p.askAllowed("Cursor Agent 默认权限模式", "ask", []string{"ask", "plan", "default", "force"})
 	} else {
+		printClaudeCodeModeHelp()
 		agentMode = p.askAllowed("Claude Code 默认权限模式", "default", []string{"default", "plan", "auto", "acceptEdits"})
 	}
 	if err := validateAgentMode(agentType, agentMode); err != nil {
@@ -136,7 +139,7 @@ func runBootstrap() error {
 	}
 
 	installAgentIfNeeded(&p, agentType)
-	providerName, providerAPIKey := configureLLM(&p, agentType)
+	provider := configureLLM(&p, agentType)
 
 	adminFrom := p.ask("管理员微信 ilink user_id，未知可先留空，扫码后再修改", "")
 	if adminFrom == "" {
@@ -167,6 +170,9 @@ func runBootstrap() error {
 	if err := writeWorkspaceFiles(workspace); err != nil {
 		return err
 	}
+	if agentType == "claudecode" {
+		initializeClaudeCodeWorkspace(workspace)
+	}
 
 	cfg := RenderConfigInput{
 		ConfigPath:      configPath,
@@ -179,15 +185,28 @@ func runBootstrap() error {
 		BridgeToken:     mustRandomToken(),
 		WebhookToken:    mustRandomToken(),
 		AdminFrom:       adminFrom,
-		ProviderName:    providerName,
-		ProviderAPIKey:  providerAPIKey,
+		ProviderName:    provider.Name,
+		ProviderAPIKey:  provider.APIKey,
+		ProviderBaseURL: provider.BaseURL,
+		ProviderModel:   provider.Model,
 		WeixinAccounts:  accounts,
 	}
 	if err := writeFile(configPath, []byte(renderConfig(cfg)), 0o600); err != nil {
 		return err
 	}
 
-	printNextSteps(configPath, projectName, len(accounts), agentType)
+	weixinSetupDone := false
+	if p.askYesNo("是否现在逐个扫码绑定微信个人号", true) {
+		if err := runSetupWeixinWithConfig(configPath, projectName, len(accounts)); err != nil {
+			return err
+		}
+		if err := completeAdminRoleAfterWeixinSetup(&p, configPath); err != nil {
+			return err
+		}
+		weixinSetupDone = true
+	}
+
+	printNextSteps(configPath, projectName, len(accounts), agentType, weixinSetupDone)
 	return nil
 }
 
@@ -237,6 +256,14 @@ func validateAgentMode(agentType, mode string) error {
 		}
 	}
 	return fmt.Errorf("%s 不支持权限模式 %q", agentType, mode)
+}
+
+func printClaudeCodeModeHelp() {
+	fmt.Fprintln(os.Stdout, "Claude Code 权限模式说明：")
+	fmt.Fprintln(os.Stdout, "- default：推荐。执行工具前按 Claude Code 默认策略询问。")
+	fmt.Fprintln(os.Stdout, "- plan：只读规划，不执行修改。")
+	fmt.Fprintln(os.Stdout, "- auto：自动执行低风险操作，适合可信本机环境。")
+	fmt.Fprintln(os.Stdout, "- acceptEdits：自动接受编辑，风险更高，首次部署不建议。")
 }
 
 func installXcodeCLTIfNeeded(p *prompt) {
@@ -316,35 +343,65 @@ func installAgentIfNeeded(p *prompt, agentType string) {
 	}
 }
 
-func configureLLM(p *prompt, agentType string) (string, string) {
+type ProviderConfig struct {
+	Name    string
+	APIKey  string
+	BaseURL string
+	Model   string
+}
+
+func configureLLM(p *prompt, agentType string) ProviderConfig {
 	if agentType == "cursor" {
 		fmt.Fprintln(os.Stdout, "Cursor Agent 通常依赖 Cursor 账号登录。")
 		if p.askYesNo("是否现在运行 agent --help 验证 CLI 可用", true) && commandExists("agent") {
 			_ = runCommand("agent", "--help")
 		}
-		return "", ""
+		return ProviderConfig{}
 	}
 
 	fmt.Fprintln(os.Stdout, "选择 Claude Code 的 LLM 配置方式：")
-	fmt.Fprintln(os.Stdout, "1) 使用 Claude Code 自带登录，脚本结束后运行 claude 完成登录")
+	fmt.Fprintln(os.Stdout, "1) 使用 Claude Code 自带登录，现在启动 claude 完成登录/授权")
 	fmt.Fprintln(os.Stdout, "2) 使用 Anthropic API Key，写入本地 cc-connect 配置")
-	fmt.Fprintln(os.Stdout, "3) 暂不配置")
-	choice := p.askAllowed("请选择", "1", []string{"1", "2", "3"})
+	fmt.Fprintln(os.Stdout, "3) 使用 OpenAI API Key，写入本地 cc-connect 配置")
+	fmt.Fprintln(os.Stdout, "4) 使用自定义 OpenAI-compatible Provider")
+	fmt.Fprintln(os.Stdout, "5) 暂不配置")
+	choice := p.askAllowed("请选择", "1", []string{"1", "2", "3", "4", "5"})
 	switch choice {
 	case "1":
-		if p.askYesNo("是否现在启动 claude 进行登录/授权", false) && commandExists("claude") {
-			_ = runCommand("claude")
-		}
+		fmt.Fprintln(os.Stdout, "稍后会在家庭助手工作目录启动 claude，用于完成登录和信任工作目录。")
 	case "2":
 		key := p.askSecret("请输入 ANTHROPIC_API_KEY，本值只写入本机生成的 config.toml，不会进入仓库模板")
 		if key != "" {
-			return "anthropic", key
+			return ProviderConfig{Name: "anthropic", APIKey: key}
 		}
 		warn("API Key 为空，跳过 Provider 写入")
 	case "3":
+		key := p.askSecret("请输入 OPENAI_API_KEY，本值只写入本机生成的 config.toml，不会进入仓库模板")
+		if key != "" {
+			return ProviderConfig{
+				Name:    "openai",
+				APIKey:  key,
+				BaseURL: p.ask("OpenAI base_url", "https://api.openai.com/v1"),
+				Model:   p.ask("OpenAI model，留空则使用 cc-connect 默认值", ""),
+			}
+		}
+		warn("API Key 为空，跳过 Provider 写入")
+	case "4":
+		name := p.ask("Provider 名称，用于 projects.agent.options.provider", "custom")
+		key := p.askSecret("请输入 Provider API Key，本值只写入本机生成的 config.toml，不会进入仓库模板")
+		if key != "" {
+			return ProviderConfig{
+				Name:    name,
+				APIKey:  key,
+				BaseURL: p.ask("Provider base_url，OpenAI-compatible 接口地址", ""),
+				Model:   p.ask("Provider model，留空则使用 cc-connect 默认值", ""),
+			}
+		}
+		warn("API Key 为空，跳过 Provider 写入")
+	case "5":
 		warn("已跳过 LLM 配置。启动前请确保 claude 已登录或 provider 已配置。")
 	}
-	return "", ""
+	return ProviderConfig{}
 }
 
 func runDoctor() error {
@@ -385,14 +442,124 @@ func runSetupWeixin(args []string) error {
 	if !commandExists("cc-connect") {
 		return errors.New("未检测到 cc-connect，请先运行 bootstrap")
 	}
+	return runSetupWeixinWithConfig(configPath, projectName, count)
+}
+
+func runSetupWeixinWithConfig(configPath, projectName string, count int) error {
+	if !commandExists("cc-connect") {
+		return errors.New("未检测到 cc-connect，请先运行 bootstrap")
+	}
 	for i := 1; i <= count; i++ {
 		fmt.Printf("\n开始绑定第 %d 个微信个人号\n", i)
 		if err := runCommand("cc-connect", "weixin", "setup", "--config", configPath, "--project", projectName, "--platform-index", strconv.Itoa(i)); err != nil {
 			return err
 		}
 	}
-	fmt.Println("\n微信绑定完成。请用每个已绑定微信号给机器人先发一条消息，以便 cc-connect 缓存 context_token。")
+	fmt.Println("\n微信绑定完成。" + weixinFirstMessageInstruction())
 	return nil
+}
+
+func completeAdminRoleAfterWeixinSetup(p *prompt, configPath string) error {
+	content, err := os.ReadFile(configPath)
+	if err != nil {
+		return err
+	}
+	adminUserID := firstConfiguredAdminFrom(string(content))
+	if adminUserID == "" {
+		adminUserID = firstBoundWeixinAllowFrom(string(content))
+	}
+	if adminUserID == "" {
+		adminUserID = p.ask("未能自动读取扫码用户，输入管理员微信 ilink user_id，留空则暂不写入 admin", "")
+	}
+	if adminUserID == "" {
+		warn("未写入管理员角色。之后可用 /whoami 获取 user_id，再手动补充 projects.users.roles.admin.user_ids。")
+		return nil
+	}
+	updated := applyAdminUserToConfig(string(content), adminUserID)
+	if err := writeFile(configPath, []byte(updated), 0o600); err != nil {
+		return err
+	}
+	say("已写入管理员角色：" + adminUserID)
+	return nil
+}
+
+func firstConfiguredAdminFrom(config string) string {
+	for _, line := range strings.Split(config, "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "admin_from = ") {
+			continue
+		}
+		raw := strings.TrimSpace(strings.TrimPrefix(line, "admin_from = "))
+		value, err := strconv.Unquote(raw)
+		if err != nil || value == "" || value == "*" {
+			continue
+		}
+		return value
+	}
+	return ""
+}
+
+func firstBoundWeixinAllowFrom(config string) string {
+	for _, line := range strings.Split(config, "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "allow_from = ") {
+			continue
+		}
+		raw := strings.TrimSpace(strings.TrimPrefix(line, "allow_from = "))
+		value, err := strconv.Unquote(raw)
+		if err != nil || value == "" || value == "*" {
+			continue
+		}
+		return value
+	}
+	return ""
+}
+
+func applyAdminUserToConfig(config, adminUserID string) string {
+	lines := strings.Split(config, "\n")
+	inAdminRole := false
+	hasAdminRole := false
+	insertAt := -1
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		switch {
+		case strings.HasPrefix(trimmed, "admin_from = "):
+			lines[i] = linePrefix(line) + "admin_from = " + tomlQuote(adminUserID)
+		case strings.HasPrefix(trimmed, "[") && trimmed != "[projects.users.roles.admin]":
+			if insertAt == -1 && trimmed == "[projects.users.roles.member]" {
+				insertAt = i
+			}
+			inAdminRole = false
+		case trimmed == "[projects.users.roles.admin]":
+			hasAdminRole = true
+			inAdminRole = true
+		case inAdminRole && strings.HasPrefix(trimmed, "user_ids = "):
+			lines[i] = linePrefix(line) + "user_ids = " + tomlArray([]string{adminUserID})
+		}
+	}
+	if !hasAdminRole {
+		adminRole := []string{
+			"[projects.users.roles.admin]",
+			"user_ids = " + tomlArray([]string{adminUserID}),
+			"disabled_commands = []",
+			"rate_limit = { max_messages = 50, window_secs = 60 }",
+			"",
+		}
+		if insertAt == -1 {
+			lines = append(lines, adminRole...)
+		} else {
+			updated := make([]string, 0, len(lines)+len(adminRole))
+			updated = append(updated, lines[:insertAt]...)
+			updated = append(updated, adminRole...)
+			updated = append(updated, lines[insertAt:]...)
+			lines = updated
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
+func linePrefix(line string) string {
+	return line[:len(line)-len(strings.TrimLeft(line, " \t"))]
 }
 
 func runStart() error {
@@ -403,13 +570,34 @@ func runStart() error {
 	if !commandExists("cc-connect") {
 		return errors.New("未检测到 cc-connect，请先运行 bootstrap")
 	}
-	if err := runCommand("cc-connect", "daemon", "install", "--config", configPath); err != nil {
+	if err := runCommand("cc-connect", daemonInstallArgs(configPath)...); err != nil {
 		return err
 	}
 	if err := runCommand("cc-connect", "daemon", "start"); err != nil {
 		return err
 	}
 	return runCommand("cc-connect", "daemon", "status")
+}
+
+func daemonInstallArgs(configPath string) []string {
+	return []string{"daemon", "install", "--config", configPath, "--force"}
+}
+
+func initializeClaudeCodeWorkspace(workspace string) {
+	if !commandExists("claude") {
+		warn("未检测到 claude，安装完成后请在家庭助手工作目录运行 claude 完成登录和信任。")
+		return
+	}
+	name, args, dir := claudeWorkspaceInitCommand(workspace)
+	fmt.Fprintf(os.Stdout, "\n将在家庭助手工作目录启动 Claude Code：%s\n", dir)
+	fmt.Fprintln(os.Stdout, "请在 Claude Code 里完成登录、信任工作目录。完成后退出 Claude Code，bootstrap 会继续。")
+	if err := runCommandInDir(dir, name, args...); err != nil {
+		warn("Claude Code 初始化未完成。之后请在家庭助手工作目录手动运行 claude。")
+	}
+}
+
+func claudeWorkspaceInitCommand(workspace string) (string, []string, string) {
+	return "claude", nil, workspace
 }
 
 func writeWorkspaceFiles(workspace string) error {
@@ -492,7 +680,7 @@ func (p prompt) askSecret(label string) string {
 	return strings.TrimSpace(text)
 }
 
-func printNextSteps(configPath, projectName string, weixinCount int, agentType string) {
+func printNextSteps(configPath, projectName string, weixinCount int, agentType string, weixinSetupDone bool) {
 	fmt.Printf("\n配置已生成：%s\n", configPath)
 	fmt.Println("\n下一步：")
 	if agentType == "claudecode" {
@@ -502,13 +690,23 @@ func printNextSteps(configPath, projectName string, weixinCount int, agentType s
 		fmt.Println("\n1. 确认 Cursor Agent 可用：")
 		fmt.Println("   agent --help")
 	}
-	fmt.Println("\n2. 逐个扫码绑定微信个人号：")
-	fmt.Printf("   PROJECT_NAME=%s CONFIG_PATH=%q %s setup-weixin %d\n", projectName, configPath, appName, weixinCount)
+	if weixinSetupDone {
+		fmt.Println("\n2. 微信扫码绑定已完成。" + weixinFirstMessageInstruction())
+	} else {
+		fmt.Println("\n2. 逐个扫码绑定微信个人号：")
+		fmt.Printf("   PROJECT_NAME=%s CONFIG_PATH=%q %s setup-weixin %d\n", projectName, configPath, appName, weixinCount)
+	}
 	fmt.Println("\n3. 启动服务：")
 	fmt.Printf("   %s start\n", appName)
 	fmt.Println("\n4. Web 管理后台：")
 	fmt.Println("   http://localhost:9820")
-	fmt.Println("\n注意：扫码后请用对应微信号先给机器人发一条消息，以便缓存 context_token。")
+	if !weixinSetupDone {
+		fmt.Println("\n注意：" + weixinFirstMessageInstruction())
+	}
+}
+
+func weixinFirstMessageInstruction() string {
+	return "请用每个已绑定微信号先给机器人发送 /login，完成登录后再发普通消息或 /whoami，以便 cc-connect 缓存 context_token。"
 }
 
 func addHomebrewToPath() {
@@ -521,6 +719,15 @@ func addHomebrewToPath() {
 
 func runCommand(name string, args ...string) error {
 	cmd := exec.Command(name, args...)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
+func runCommandInDir(dir, name string, args ...string) error {
+	cmd := exec.Command(name, args...)
+	cmd.Dir = dir
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

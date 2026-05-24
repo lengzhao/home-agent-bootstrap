@@ -34,7 +34,9 @@ long_poll_timeout_ms = 35000
 
 ## 扫码绑定
 
-按平台顺序绑定。第一个 `weixin` 块是 `--platform-index 1`，第二个是 `--platform-index 2`：
+bootstrap 默认会在生成配置后按平台顺序扫码绑定。第一个 `weixin` 块是 `--platform-index 1`，第二个是 `--platform-index 2`。
+
+如果 bootstrap 时跳过扫码，可之后手动执行：
 
 ```bash
 cc-connect weixin setup --config ~/.cc-connect/config.toml --project home --platform-index 1
@@ -46,6 +48,8 @@ cc-connect weixin setup --config ~/.cc-connect/config.toml --project home --plat
 ```bash
 go run . setup-weixin 2
 ```
+
+扫码完成后，bootstrap 会优先读取第一个已回填的 `allow_from`，并写入 `projects.users.roles.admin.user_ids`。如果配置里没有回填，会提示输入管理员微信 ilink `user_id`；继续留空时会省略 admin role，避免生成 `user_ids = []` 的无效配置。
 
 ## 已有 Token
 
@@ -86,4 +90,10 @@ cc-connect weixin bind --config ~/.cc-connect/config.toml --project home --platf
 
 ## 首次对话
 
-每个微信号扫码成功后，都需要先给机器人发一条消息。这样 cc-connect 才能缓存 `context_token` 并正常回复。
+每个微信号扫码成功后，都需要先给机器人发送：
+
+```text
+/login
+```
+
+完成登录后，再发送普通消息或 `/whoami`。这样 cc-connect 才能缓存 `context_token` 并正常回复。若普通消息返回 `Not logged in . Please run /login`，说明还没有完成这一步。

@@ -7,7 +7,7 @@
 - `Cursor Agent` 作为可选运行时 Agent 或开发维护助手
 - 多个微信个人号同时接入同一个家庭助手 project
 
-配置模板和工作区模板通过 Go `embed` 打进二进制。发布后只需要一个 `cc-home` 程序，即可生成 `config.toml`、`HOME.md`、`HEARTBEAT.md`、`CLAUDE.md` 并执行后续引导。
+配置模板和工作区模板通过 Go `embed` 打进二进制。发布后只需要一个 `home-agent-bootstrap` 程序，即可生成 `config.toml`、`HOME.md`、`HEARTBEAT.md`、`CLAUDE.md` 并执行后续引导。
 
 ## 快速开始
 
@@ -22,8 +22,8 @@ go run . bootstrap
 构建本地二进制：
 
 ```bash
-go build -o cc-home .
-./cc-home bootstrap
+go build -o home-agent-bootstrap .
+./home-agent-bootstrap bootstrap
 ```
 
 如果你已经装好依赖，只想生成配置：
@@ -37,12 +37,15 @@ INSTALL_DEPS=0 go run . bootstrap
 1. 检查并引导安装 Xcode Command Line Tools、Homebrew、Node.js/npm、ffmpeg。
 2. 安装 `cc-connect`。
 3. 引导选择并安装 `Claude Code` 或 `Cursor Agent`。
-4. 引导 Claude 登录或写入本机 LLM Provider 配置。
+4. 在家庭助手工作目录启动 Claude Code，完成登录和信任工作目录；或写入 Anthropic、OpenAI、自定义 OpenAI-compatible LLM Provider 配置。
 5. 生成 `~/.cc-connect/config.toml`。
 6. 创建家庭助手工作目录，默认 `~/home-assistant-workspace`。
 7. 写入 `HOME.md`、`HEARTBEAT.md`、`CLAUDE.md`。
 8. 按数量生成多个微信个人号配置块。
-9. 输出后续扫码绑定和 daemon 启动命令。
+9. 默认立即逐个扫码绑定微信个人号，并自动回填管理员角色。
+10. 输出 daemon 启动命令和管理后台地址。
+
+微信扫码绑定后，需要先在每个已绑定微信号里给机器人发送 `/login`，再发送普通消息或 `/whoami`。
 
 ## 推荐架构
 

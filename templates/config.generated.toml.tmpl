@@ -7,6 +7,12 @@ attachment_send = "on"
 [[providers]]
 name = {{ quote .ProviderName }}
 api_key = {{ quote .ProviderAPIKey }}
+{{- if .ProviderBaseURL }}
+base_url = {{ quote .ProviderBaseURL }}
+{{- end }}
+{{- if .ProviderModel }}
+model = {{ quote .ProviderModel }}
+{{- end }}
 agent_types = ["claudecode"]
 {{- end }}
 
@@ -53,10 +59,13 @@ admin_from = {{ quote .AdminFrom }}
 [projects.users]
 default_role = "member"
 
+{{- if .AdminUserIDs }}
+
 [projects.users.roles.admin]
 user_ids = {{ array .AdminUserIDs }}
 disabled_commands = []
 rate_limit = { max_messages = 50, window_secs = 60 }
+{{- end }}
 
 [projects.users.roles.member]
 user_ids = ["*"]
