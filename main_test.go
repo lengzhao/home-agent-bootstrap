@@ -18,9 +18,9 @@ func TestRenderConfigOmitsAdminRoleWhenUnknown(t *testing.T) {
 		ManagementToken: "mgmt",
 		BridgeToken:     "bridge",
 		WebhookToken:    "hook",
-		WeixinAccounts: []WeixinAccount{
-			{AccountID: "wx-main"},
-			{AccountID: "wx-family", AllowFrom: "family@im.wechat"},
+		Platforms: []PlatformBlock{
+			testWeixinPlatform("wx-main", ""),
+			testWeixinPlatform("wx-family", "family@im.wechat"),
 		},
 	}
 
@@ -57,7 +57,7 @@ func TestRenderConfigIncludesAdminRoleWhenAdminKnown(t *testing.T) {
 		BridgeToken:     "bridge",
 		WebhookToken:    "hook",
 		AdminFrom:       "admin@im.wechat",
-		WeixinAccounts:  []WeixinAccount{{AccountID: "wx-main"}},
+		Platforms:       []PlatformBlock{testWeixinPlatform("wx-main", "")},
 	}
 
 	got := renderConfig(cfg)
@@ -119,7 +119,7 @@ func TestRenderConfigIncludesProviderWhenAPIKeyProvided(t *testing.T) {
 		WebhookToken:    "hook",
 		ProviderName:    "anthropic",
 		ProviderAPIKey:  "sk-test",
-		WeixinAccounts:  []WeixinAccount{{AccountID: "wx-main"}},
+		Platforms:       []PlatformBlock{testWeixinPlatform("wx-main", "")},
 	}
 
 	got := renderConfig(cfg)
@@ -137,6 +137,74 @@ func TestRenderConfigIncludesProviderWhenAPIKeyProvided(t *testing.T) {
 	}
 }
 
+func TestRenderConfigIncludesTelegramPlatform(t *testing.T) {
+	cfg := RenderConfigInput{
+		DataDir:         "/Users/me/.cc-connect",
+		Workspace:       "/Users/me/home-assistant-workspace",
+		ProjectName:     "home",
+		AgentType:       "claudecode",
+		AgentMode:       "default",
+		ManagementToken: "mgmt",
+		BridgeToken:     "bridge",
+		WebhookToken:    "hook",
+		Platforms: []PlatformBlock{
+			{
+				Type: "telegram",
+				Options: []PlatformOption{
+					{Key: "token", Value: "tg-token"},
+					{Key: "allow_from", Value: ""},
+				},
+			},
+		},
+	}
+
+	got := renderConfig(cfg)
+
+	for _, want := range []string{
+		`type = "telegram"`,
+		`token = "tg-token"`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("config missing %q:\n%s", want, got)
+		}
+	}
+}
+
+func TestOpenRouterClaudeCodeShellProfile(t *testing.T) {
+	profile := openrouterClaudeCodeProfile("sk-or", "", "")
+	block := buildClaudeCodeExportBlock(profile)
+
+	for _, want := range []string{
+		`ANTHROPIC_BASE_URL='https://openrouter.ai/api/v1'`,
+		`ANTHROPIC_AUTH_TOKEN='sk-or'`,
+		`ANTHROPIC_MODEL='anthropic/claude-sonnet-4'`,
+	} {
+		if !strings.Contains(block, want) {
+			t.Fatalf("block missing %q:\n%s", want, block)
+		}
+	}
+}
+
+func TestRenderConfigOmitsProviderWhenUsingShellEnvOnly(t *testing.T) {
+	cfg := RenderConfigInput{
+		DataDir:         "/Users/me/.cc-connect",
+		Workspace:       "/Users/me/home-assistant-workspace",
+		ProjectName:     "home",
+		AgentType:       "claudecode",
+		AgentMode:       "default",
+		ManagementToken: "mgmt",
+		BridgeToken:     "bridge",
+		WebhookToken:    "hook",
+		Platforms:       []PlatformBlock{testWeixinPlatform("wx-main", "")},
+	}
+
+	got := renderConfig(cfg)
+
+	if strings.Contains(got, `[[providers]]`) {
+		t.Fatalf("config should omit providers when only shell env is used:\n%s", got)
+	}
+}
+
 func TestRenderConfigIncludesOpenAICompatibleProviderOptions(t *testing.T) {
 	cfg := RenderConfigInput{
 		DataDir:         "/Users/me/.cc-connect",
@@ -151,7 +219,7 @@ func TestRenderConfigIncludesOpenAICompatibleProviderOptions(t *testing.T) {
 		ProviderAPIKey:  "sk-openai",
 		ProviderBaseURL: "https://api.openai.com/v1",
 		ProviderModel:   "gpt-4.1",
-		WeixinAccounts:  []WeixinAccount{{AccountID: "wx-main"}},
+		Platforms:       []PlatformBlock{testWeixinPlatform("wx-main", "")},
 	}
 
 	got := renderConfig(cfg)

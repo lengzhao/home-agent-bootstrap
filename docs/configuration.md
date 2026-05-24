@@ -95,31 +95,64 @@ path = "/hook"
 - `devices.md`：设备清单和控制风险等级。
 - `tasks.md`：家庭长期待办。
 
+## 接入平台
+
+bootstrap 会列出 cc-connect 支持的平台类型（飞书、钉钉、Telegram、Slack、Discord、企业微信、微信个人号、LINE、QQ、QQ 官方机器人、微博等），按序号多选后生成配置。
+
+详见 [接入平台选择](platforms.md)。微信多账号说明见 [多微信个人号](multi-weixin.md)。
+
 ## LLM 配置
 
-全新 Mac 上推荐按 bootstrap 提示选择：
+Claude Code 运行时（`claudecode`）分两类配置方式：
 
-1. 使用 Claude Code 自带登录。安装器会在家庭助手工作目录中启动 `claude`，按官方流程完成登录和信任工作目录。
-2. 在安装器里输入 `ANTHROPIC_API_KEY`。脚本会把 `anthropic` Provider 写入本机 `~/.cc-connect/config.toml`，并在项目里引用该 Provider。
-3. 在安装器里输入 `OPENAI_API_KEY`。脚本会把 `openai` Provider 写入本机配置，并允许设置 `base_url` 和 `model`。
-4. 使用自定义 OpenAI-compatible Provider。脚本会询问 Provider 名称、API Key、`base_url` 和 `model`。
+### 官方方式（写入 config.toml）
 
-示例：
+1. **Claude Code 自带登录**：不写 `[[providers]]`，在家庭助手工作目录运行 `claude` 完成授权。
+2. **Anthropic API Key**：写入 `[[providers]]` 并在 agent 中引用。
 
 ```toml
 [[providers]]
-name = "openai"
-api_key = "sk-..."
-base_url = "https://api.openai.com/v1"
-model = "gpt-4.1"
+name = "anthropic"
+api_key = "sk-ant-..."
 agent_types = ["claudecode"]
 
 [projects.agent.options]
-provider = "openai"
-provider_refs = ["openai"]
+provider = "anthropic"
+provider_refs = ["anthropic"]
 ```
 
-不要把生成后的 `~/.cc-connect/config.toml` 提交到 GitHub。
+### 第三方 LLM（写入 ~/.zshrc）
+
+OpenAI、OpenRouter、Kimi、火山、通义及自定义 OpenAI-compatible **不写入** `config.toml`，而是写入 `~/.zshrc` 中带标记的环境变量块，供 Claude Code 通过 `ANTHROPIC_*` 变量路由。
+
+bootstrap 选项 3–8 会生成类似：
+
+```bash
+# >>> home-agent-bootstrap claude-code >>>
+export ANTHROPIC_BASE_URL='https://api.moonshot.cn/anthropic'
+export ANTHROPIC_AUTH_TOKEN='YOUR_MOONSHOT_API_KEY'
+export ANTHROPIC_MODEL='kimi-k2.5'
+# <<< home-agent-bootstrap claude-code <<<
+```
+
+配置完成后执行：
+
+```bash
+source ~/.zshrc
+claude
+```
+
+在 Claude Code 内用 `/status` 确认模型。Kimi 详见 [官方 Claude Code 接入说明](https://platform.kimi.com/docs/guide/agent-support)。
+
+| 预设 | 默认 ANTHROPIC_BASE_URL | 默认模型 |
+|------|-------------------------|----------|
+| OpenAI | https://api.openai.com/v1 | gpt-4.1 |
+| OpenRouter | https://openrouter.ai/api/v1 | anthropic/claude-sonnet-4 |
+| Kimi | https://api.moonshot.cn/anthropic | kimi-k2.5 |
+| 火山 | https://ark.cn-beijing.volces.com/api/v3 | 安装时指定 |
+| 通义 | https://dashscope.aliyuncs.com/compatible-mode/v1 | qwen-plus |
+
+不要把 `~/.cc-connect/config.toml` 或含 API Key 的 `~/.zshrc` 片段提交到 GitHub。
 
 ## 启动服务
 

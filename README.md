@@ -2,7 +2,7 @@
 
 这是一个面向 GitHub 发布的 Go 引导程序，用于在全新 Mac、常开 Mac 或小主机上快速搭建：
 
-- `cc-connect` 作为微信个人号入口、会话网关、定时任务和事件调度器
+- `cc-connect` 作为聊天平台入口（微信、飞书、Telegram 等）、会话网关、定时任务和事件调度器
 - `Claude Code` 作为推荐运行时 Agent
 - `Cursor Agent` 作为可选运行时 Agent 或开发维护助手
 - 多个微信个人号同时接入同一个家庭助手 project
@@ -37,12 +37,12 @@ INSTALL_DEPS=0 go run . bootstrap
 1. 检查并引导安装 Xcode Command Line Tools、Homebrew、Node.js/npm、ffmpeg。
 2. 安装 `cc-connect`。
 3. 引导选择并安装 `Claude Code` 或 `Cursor Agent`。
-4. 在家庭助手工作目录启动 Claude Code，完成登录和信任工作目录；或写入 Anthropic、OpenAI、自定义 OpenAI-compatible LLM Provider 配置。
-5. 生成 `~/.cc-connect/config.toml`。
-6. 创建家庭助手工作目录，默认 `~/home-assistant-workspace`。
-7. 写入 `HOME.md`、`HEARTBEAT.md`、`CLAUDE.md`。
-8. 按数量生成多个微信个人号配置块。
-9. 默认立即逐个扫码绑定微信个人号，并自动回填管理员角色。
+4. 配置 LLM（Claude Code 登录或 Anthropic/OpenAI/OpenRouter/Kimi/火山/通义等预设 Provider）。
+5. 从 cc-connect 支持列表选择接入平台（可多选，含微信个人号）。
+6. 生成 `~/.cc-connect/config.toml`。
+7. 创建家庭助手工作目录，默认 `~/home-assistant-workspace`。
+8. 写入 `HOME.md`、`HEARTBEAT.md`、`CLAUDE.md`。
+9. 若包含微信，默认逐个扫码绑定并自动回填管理员角色。
 10. 输出 daemon 启动命令和管理后台地址。
 
 微信扫码绑定后，需要先在每个已绑定微信号里给机器人发送 `/login`，再发送普通消息或 `/whoami`。
@@ -51,8 +51,8 @@ INSTALL_DEPS=0 go run . bootstrap
 
 ```mermaid
 flowchart TD
-  Family[家庭成员] --> Weixin[微信个人号]
-  Weixin --> CC[cc-connect daemon]
+  Family[家庭成员] --> Platforms[聊天平台]
+  Platforms --> CC[cc-connect daemon]
   CC --> Agent[Claude Code 或 Cursor Agent]
   Agent --> Workspace[家庭助手工作目录]
   CC --> Cron[Cron 定时任务]
@@ -101,8 +101,10 @@ workspace/
 docs/
   fresh-mac.md
   configuration.md
+  platforms.md
   multi-weixin.md
   security.md
+  plans/
 ```
 
 ## 不要提交的内容
@@ -119,5 +121,6 @@ docs/
 
 - [全新 Mac 引导](docs/fresh-mac.md)
 - [配置说明](docs/configuration.md)
+- [接入平台选择](docs/platforms.md)
 - [多微信个人号](docs/multi-weixin.md)
 - [安全建议](docs/security.md)

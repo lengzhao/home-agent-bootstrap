@@ -13,15 +13,14 @@
 3. 使用 Homebrew 安装 Node.js/npm 和 ffmpeg。
 4. 使用 npm 安装 `cc-connect`。
 5. 按选择安装 `Claude Code` 或 `Cursor Agent`。
-6. 引导配置 LLM：
-   - 在家庭助手工作目录启动 Claude Code，完成登录和信任工作目录。
-   - 或把 Anthropic、OpenAI、自定义 OpenAI-compatible Provider 写入本机 `config.toml`。
-7. 生成 `~/.cc-connect/config.toml`。
-8. 创建家庭助手工作目录。
-9. 写入 `HOME.md`、`HEARTBEAT.md`、`CLAUDE.md`。
-10. 按数量生成多个微信个人号平台块。
-11. 默认立即逐个扫码绑定微信个人号。
-12. 扫码后自动把第一个已回填的 `allow_from` 写入 `projects.users.roles.admin.user_ids`。
+6. 引导配置 LLM（Claude Code 登录或 Anthropic/OpenAI/OpenRouter/Kimi/火山/通义等预设 Provider）。
+7. 从 cc-connect 支持列表中选择接入平台（可多选）。
+8. 生成 `~/.cc-connect/config.toml`。
+9. 创建家庭助手工作目录。
+10. 写入 `HOME.md`、`HEARTBEAT.md`、`CLAUDE.md`。
+11. 按选择生成各平台 `[[projects.platforms]]` 块；微信可配置多个个人号。
+12. 若包含微信，默认立即逐个扫码绑定。
+13. 扫码后自动把第一个已回填的 `allow_from` 写入 `projects.users.roles.admin.user_ids`。
 
 ## 执行
 
@@ -54,12 +53,13 @@ type = "claudecode"
 mode = "default"
 ```
 
-LLM 配置有两种方式：
+LLM 配置方式：
 
-- 使用 `claude` 交互式登录，适合个人订阅或 Claude Code 常规使用。安装器会在家庭助手工作目录中启动 `claude`，让登录和信任工作目录一次完成。
-- 输入 `ANTHROPIC_API_KEY`，安装器会写入本机 `~/.cc-connect/config.toml` 的 `[[providers]]`。
-- 输入 `OPENAI_API_KEY`，安装器会写入 `openai` Provider，可指定 `base_url` 和 `model`。
-- 输入自定义 OpenAI-compatible Provider，可指定 Provider 名称、API Key、`base_url` 和 `model`。
+- 使用 `claude` 交互式登录，适合个人订阅或 Claude Code 常规使用。
+- 官方 Anthropic API Key 写入 `config.toml`；其他第三方 LLM（OpenAI、OpenRouter、Kimi、火山、通义等）写入 `~/.zshrc` 环境变量，完成后执行 `source ~/.zshrc` 再运行 `claude`。
+- 使用自定义 OpenAI-compatible Provider。
+
+接入平台见 [接入平台选择](platforms.md)。
 
 不要把生成后的 `config.toml` 提交到 GitHub。
 

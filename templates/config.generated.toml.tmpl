@@ -97,16 +97,13 @@ cmd = "agent"
 # silent = true
 # timeout_mins = 10
 # prompt = "读取 HEARTBEAT.md，检查今天家庭提醒、待办、异常事项，只在需要时提醒。"
-{{ range .WeixinAccounts }}
+{{ range .Platforms }}
 
 [[projects.platforms]]
-type = "weixin"
+type = {{ quote .Type }}
 
 [projects.platforms.options]
-token = ""
-base_url = "https://ilinkai.weixin.qq.com"
-cdn_base_url = "https://novac2c.cdn.weixin.qq.com/c2c"
-allow_from = {{ quote .AllowFrom }}
-account_id = {{ quote .AccountID }}
-long_poll_timeout_ms = 35000
+{{- range .Options }}
+{{ .Key }} = {{ if eq .Key "long_poll_timeout_ms" }}{{ .Value }}{{ else }}{{ quote .Value }}{{ end }}
+{{- end }}
 {{- end }}

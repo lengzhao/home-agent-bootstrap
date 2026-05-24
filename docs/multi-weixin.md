@@ -1,5 +1,7 @@
 # 多微信个人号配置
 
+本文档仅说明微信个人号（`weixin`）多账号场景。其他接入平台见 [接入平台选择](platforms.md)。
+
 cc-connect 支持在同一个 `[[projects]]` 下配置多个 `weixin` 平台。每个微信个人号需要独立的：
 
 - `token`

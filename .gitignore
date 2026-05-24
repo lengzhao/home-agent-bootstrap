@@ -56,3 +56,4 @@ audit/
 # Go build outputs
 home-agent-bootstrap
 coverage.out
+dist/

@@ -23,11 +23,6 @@ const appName = "home-agent-bootstrap"
 //go:embed workspace templates/config.generated.toml.tmpl
 var workspaceTemplates embed.FS
 
-type WeixinAccount struct {
-	AccountID string
-	AllowFrom string
-}
-
 type RenderConfigInput struct {
 	ConfigPath      string
 	DataDir         string
@@ -43,7 +38,7 @@ type RenderConfigInput struct {
 	ProviderAPIKey  string
 	ProviderBaseURL string
 	ProviderModel   string
-	WeixinAccounts  []WeixinAccount
+	Platforms       []PlatformBlock
 }
 
 type prompt struct {
@@ -141,21 +136,22 @@ func runBootstrap() error {
 	installAgentIfNeeded(&p, agentType)
 	provider := configureLLM(&p, agentType)
 
-	adminFrom := p.ask("管理员微信 ilink user_id，未知可先留空，扫码后再修改", "")
-	if adminFrom == "" {
-		warn("admin_from 为空时，特权命令不会授予任何用户。扫码后请用 /whoami 获取 user_id 并补充配置。")
+	platforms, err := configurePlatforms(&p)
+	if err != nil {
+		return err
 	}
 
-	weixinCountText := p.ask("要配置几个微信个人号", "1")
-	weixinCount, err := strconv.Atoi(weixinCountText)
-	if err != nil || weixinCount < 1 {
-		return fmt.Errorf("微信个人号数量必须是大于 0 的数字")
-	}
-	accounts := make([]WeixinAccount, 0, weixinCount)
-	for i := 1; i <= weixinCount; i++ {
-		accountID := p.ask(fmt.Sprintf("第 %d 个微信个人号 account_id", i), fmt.Sprintf("wx-%d", i))
-		allowFrom := p.ask(fmt.Sprintf("第 %d 个微信个人号 allow_from，首次可留空让 setup 回填", i), "")
-		accounts = append(accounts, WeixinAccount{AccountID: accountID, AllowFrom: allowFrom})
+	adminFrom := ""
+	if hasWeixinPlatform(platforms) {
+		adminFrom = p.ask("管理员微信 ilink user_id，未知可先留空，扫码后再修改", "")
+		if adminFrom == "" {
+			warn("admin_from 为空时，特权命令不会授予任何用户。扫码后请用 /whoami 获取 user_id 并补充配置。")
+		}
+	} else {
+		adminFrom = p.ask("管理员 user_id（平台相关），未知可先留空", "")
+		if adminFrom == "" {
+			warn("admin_from 为空时，特权命令不会授予任何用户。请在各平台完成首次对话后用 /whoami 获取 id 并补充配置。")
+		}
 	}
 
 	if exists(configPath) {
@@ -189,15 +185,16 @@ func runBootstrap() error {
 		ProviderAPIKey:  provider.APIKey,
 		ProviderBaseURL: provider.BaseURL,
 		ProviderModel:   provider.Model,
-		WeixinAccounts:  accounts,
+		Platforms:       platforms,
 	}
 	if err := writeFile(configPath, []byte(renderConfig(cfg)), 0o600); err != nil {
 		return err
 	}
 
+	weixinCount := countWeixinPlatforms(platforms)
 	weixinSetupDone := false
-	if p.askYesNo("是否现在逐个扫码绑定微信个人号", true) {
-		if err := runSetupWeixinWithConfig(configPath, projectName, len(accounts)); err != nil {
+	if weixinCount > 0 && p.askYesNo("是否现在逐个扫码绑定微信个人号", true) {
+		if err := runSetupWeixinWithConfig(configPath, projectName, weixinCount); err != nil {
 			return err
 		}
 		if err := completeAdminRoleAfterWeixinSetup(&p, configPath); err != nil {
@@ -206,7 +203,7 @@ func runBootstrap() error {
 		weixinSetupDone = true
 	}
 
-	printNextSteps(configPath, projectName, len(accounts), agentType, weixinSetupDone)
+	printNextSteps(configPath, projectName, platforms, agentType, weixinSetupDone)
 	return nil
 }
 
@@ -361,11 +358,15 @@ func configureLLM(p *prompt, agentType string) ProviderConfig {
 
 	fmt.Fprintln(os.Stdout, "选择 Claude Code 的 LLM 配置方式：")
 	fmt.Fprintln(os.Stdout, "1) 使用 Claude Code 自带登录，现在启动 claude 完成登录/授权")
-	fmt.Fprintln(os.Stdout, "2) 使用 Anthropic API Key，写入本地 cc-connect 配置")
-	fmt.Fprintln(os.Stdout, "3) 使用 OpenAI API Key，写入本地 cc-connect 配置")
-	fmt.Fprintln(os.Stdout, "4) 使用自定义 OpenAI-compatible Provider")
-	fmt.Fprintln(os.Stdout, "5) 暂不配置")
-	choice := p.askAllowed("请选择", "1", []string{"1", "2", "3", "4", "5"})
+	fmt.Fprintln(os.Stdout, "2) Anthropic API Key")
+	fmt.Fprintln(os.Stdout, "3) OpenAI（写入 ~/.zshrc 环境变量）")
+	fmt.Fprintln(os.Stdout, "4) OpenRouter（写入 ~/.zshrc 环境变量）")
+	fmt.Fprintln(os.Stdout, "5) Kimi (Moonshot)（写入 ~/.zshrc，见 platform.kimi.com 文档）")
+	fmt.Fprintln(os.Stdout, "6) 火山引擎 (豆包)（写入 ~/.zshrc 环境变量）")
+	fmt.Fprintln(os.Stdout, "7) 通义千问 (DashScope)（写入 ~/.zshrc 环境变量）")
+	fmt.Fprintln(os.Stdout, "8) 自定义 OpenAI-compatible（写入 ~/.zshrc 环境变量）")
+	fmt.Fprintln(os.Stdout, "9) 暂不配置")
+	choice := p.askAllowed("请选择", "1", []string{"1", "2", "3", "4", "5", "6", "7", "8", "9"})
 	switch choice {
 	case "1":
 		fmt.Fprintln(os.Stdout, "稍后会在家庭助手工作目录启动 claude，用于完成登录和信任工作目录。")
@@ -376,29 +377,48 @@ func configureLLM(p *prompt, agentType string) ProviderConfig {
 		}
 		warn("API Key 为空，跳过 Provider 写入")
 	case "3":
-		key := p.askSecret("请输入 OPENAI_API_KEY，本值只写入本机生成的 config.toml，不会进入仓库模板")
-		if key != "" {
-			return ProviderConfig{
-				Name:    "openai",
-				APIKey:  key,
-				BaseURL: p.ask("OpenAI base_url", "https://api.openai.com/v1"),
-				Model:   p.ask("OpenAI model，留空则使用 cc-connect 默认值", ""),
+		if preset, ok := providerPresetByName("openai"); ok {
+			if err := configureClaudeCodeShellFromPreset(p, preset); err != nil {
+				warn(err.Error())
 			}
 		}
-		warn("API Key 为空，跳过 Provider 写入")
 	case "4":
-		name := p.ask("Provider 名称，用于 projects.agent.options.provider", "custom")
-		key := p.askSecret("请输入 Provider API Key，本值只写入本机生成的 config.toml，不会进入仓库模板")
-		if key != "" {
-			return ProviderConfig{
-				Name:    name,
-				APIKey:  key,
-				BaseURL: p.ask("Provider base_url，OpenAI-compatible 接口地址", ""),
-				Model:   p.ask("Provider model，留空则使用 cc-connect 默认值", ""),
+		if preset, ok := providerPresetByName("openrouter"); ok {
+			if err := configureClaudeCodeShellFromPreset(p, preset); err != nil {
+				warn(err.Error())
 			}
 		}
-		warn("API Key 为空，跳过 Provider 写入")
 	case "5":
+		if preset, ok := providerPresetByName("kimi"); ok {
+			if err := configureClaudeCodeShellFromPreset(p, preset); err != nil {
+				warn(err.Error())
+			}
+		}
+	case "6":
+		if preset, ok := providerPresetByName("volcengine"); ok {
+			if err := configureClaudeCodeShellFromPreset(p, preset); err != nil {
+				warn(err.Error())
+			}
+		}
+	case "7":
+		if preset, ok := providerPresetByName("qwen"); ok {
+			if err := configureClaudeCodeShellFromPreset(p, preset); err != nil {
+				warn(err.Error())
+			}
+		}
+	case "8":
+		key := p.askSecret("请输入 API Key，将写入 ~/.zshrc（不会写入 config.toml）")
+		if key != "" {
+			baseURL := p.ask("ANTHROPIC_BASE_URL（OpenAI-compatible 接口地址）", "")
+			model := p.ask("模型 ID", "")
+			profile := customClaudeCodeProfile(key, model, baseURL)
+			if err := configureClaudeCodeShellEnv(p, profile, ""); err != nil {
+				warn(err.Error())
+			}
+		} else {
+			warn("API Key 为空，跳过环境变量配置")
+		}
+	case "9":
 		warn("已跳过 LLM 配置。启动前请确保 claude 已登录或 provider 已配置。")
 	}
 	return ProviderConfig{}
@@ -680,27 +700,46 @@ func (p prompt) askSecret(label string) string {
 	return strings.TrimSpace(text)
 }
 
-func printNextSteps(configPath, projectName string, weixinCount int, agentType string, weixinSetupDone bool) {
+func printNextSteps(configPath, projectName string, platforms []PlatformBlock, agentType string, weixinSetupDone bool) {
 	fmt.Printf("\n配置已生成：%s\n", configPath)
 	fmt.Println("\n下一步：")
 	if agentType == "claudecode" {
 		fmt.Println("\n1. 确认 Claude Code 可登录：")
+		fmt.Println("   source ~/.zshrc   # 若使用第三方 LLM 环境变量")
 		fmt.Println("   claude")
 	} else {
 		fmt.Println("\n1. 确认 Cursor Agent 可用：")
 		fmt.Println("   agent --help")
 	}
-	if weixinSetupDone {
-		fmt.Println("\n2. 微信扫码绑定已完成。" + weixinFirstMessageInstruction())
-	} else {
-		fmt.Println("\n2. 逐个扫码绑定微信个人号：")
-		fmt.Printf("   PROJECT_NAME=%s CONFIG_PATH=%q %s setup-weixin %d\n", projectName, configPath, appName, weixinCount)
+
+	step := 2
+	weixinCount := countWeixinPlatforms(platforms)
+	if weixinCount > 0 {
+		if weixinSetupDone {
+			fmt.Printf("\n%d. 微信扫码绑定已完成。%s\n", step, weixinFirstMessageInstruction())
+		} else {
+			fmt.Printf("\n%d. 逐个扫码绑定微信个人号：\n", step)
+			fmt.Printf("   PROJECT_NAME=%s CONFIG_PATH=%q %s setup-weixin %d\n", projectName, configPath, appName, weixinCount)
+		}
+		step++
 	}
-	fmt.Println("\n3. 启动服务：")
+
+	hints := platformSetupHints(platforms)
+	if len(hints) > 0 {
+		fmt.Printf("\n%d. 其他平台可使用 cc-connect setup 命令补全凭证：\n", step)
+		for _, hint := range hints {
+			fmt.Println(hint)
+		}
+		step++
+	}
+
+	fmt.Printf("\n%d. 启动服务：\n", step)
 	fmt.Printf("   %s start\n", appName)
-	fmt.Println("\n4. Web 管理后台：")
+	step++
+	fmt.Printf("\n%d. Web 管理后台：\n", step)
 	fmt.Println("   http://localhost:9820")
-	if !weixinSetupDone {
+
+	if weixinCount > 0 && !weixinSetupDone {
 		fmt.Println("\n注意：" + weixinFirstMessageInstruction())
 	}
 }
