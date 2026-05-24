@@ -1,0 +1,103 @@
+language = "zh"
+data_dir = {{ quote .DataDir }}
+attachment_send = "on"
+
+{{- if .ProviderName }}
+
+[[providers]]
+name = {{ quote .ProviderName }}
+api_key = {{ quote .ProviderAPIKey }}
+agent_types = ["claudecode"]
+{{- end }}
+
+[log]
+level = "info"
+
+[display]
+mode = "compact"
+thinking_messages = false
+tool_messages = true
+thinking_max_len = 300
+tool_max_len = 500
+
+[management]
+enabled = true
+port = 9820
+token = {{ quote .ManagementToken }}
+cors_origins = ["http://localhost:9820", "http://127.0.0.1:9820"]
+
+[bridge]
+enabled = true
+port = 9810
+token = {{ quote .BridgeToken }}
+path = "/bridge/ws"
+
+[webhook]
+enabled = true
+port = 9111
+token = {{ quote .WebhookToken }}
+path = "/hook"
+
+[[hooks]]
+event = "*"
+type = "command"
+command = {{ quote .AuditCommand }}
+async = true
+timeout = 5
+
+[[projects]]
+name = {{ quote .ProjectName }}
+reset_on_idle_mins = 60
+admin_from = {{ quote .AdminFrom }}
+
+[projects.users]
+default_role = "member"
+
+[projects.users.roles.admin]
+user_ids = {{ array .AdminUserIDs }}
+disabled_commands = []
+rate_limit = { max_messages = 50, window_secs = 60 }
+
+[projects.users.roles.member]
+user_ids = ["*"]
+disabled_commands = ["shell", "show", "dir", "restart", "upgrade", "commands"]
+rate_limit = { max_messages = 10, window_secs = 60 }
+
+[projects.agent]
+type = {{ quote .AgentType }}
+
+[projects.agent.options]
+work_dir = {{ quote .Workspace }}
+mode = {{ quote .AgentMode }}
+{{- if and .ProviderName (eq .AgentType "claudecode") }}
+provider = {{ quote .ProviderName }}
+provider_refs = [{{ quote .ProviderName }}]
+{{- end }}
+{{- if eq .AgentType "cursor" }}
+cmd = "agent"
+{{- end }}
+
+# Heartbeat 需要知道目标会话 session_key。
+# 启动并完成首次微信对话后，可通过 /status 或日志确认 session_key，再取消注释。
+#
+# [projects.heartbeat]
+# enabled = true
+# interval_mins = 60
+# session_key = "weixin:REPLACE_WITH_SESSION_KEY"
+# only_when_idle = true
+# silent = true
+# timeout_mins = 10
+# prompt = "读取 HEARTBEAT.md，检查今天家庭提醒、待办、异常事项，只在需要时提醒。"
+{{ range .WeixinAccounts }}
+
+[[projects.platforms]]
+type = "weixin"
+
+[projects.platforms.options]
+token = ""
+base_url = "https://ilinkai.weixin.qq.com"
+cdn_base_url = "https://novac2c.cdn.weixin.qq.com/c2c"
+allow_from = {{ quote .AllowFrom }}
+account_id = {{ quote .AccountID }}
+long_poll_timeout_ms = 35000
+{{- end }}

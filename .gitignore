@@ -26,7 +26,33 @@ go.work.sum
 
 # env file
 .env
+.env.*
 
 # Editor/IDE
-# .idea/
-# .vscode/
+.idea/
+.vscode/
+
+.DS_Store
+
+# 本仓库只提交模板，不提交真实运行配置和凭据
+config.toml
+*.local.toml
+*.bak
+
+# cc-connect 运行态数据
+.cc-connect/
+weixin/
+sessions/
+run/
+audit/
+
+# 编辑器和临时文件
+.idea/
+.vscode/
+*.tmp
+*.log
+.tmp-*/
+
+# Go build outputs
+cc-home
+coverage.out
