@@ -36,7 +36,7 @@ Claude Code 分两类配置：
 | 方式 | 适用 | 写入位置 |
 |------|------|----------|
 | 官方 | Claude Code 登录、Anthropic API Key | 登录流程 / `config.toml` `[[providers]]` |
-| 第三方 | OpenAI、OpenRouter、Kimi、火山、通义、自定义 | `~/.zshrc` 中 `ANTHROPIC_*` 环境变量块 |
+| 第三方 | OpenAI、OpenRouter、Kimi、火山、通义、自定义 | `config.toml` `[[providers]]`，并同步 `~/.zshrc` 中 `ANTHROPIC_*` 环境变量块 |
 
 第三方预设默认模型与 base_url（Kimi 见 [官方文档](https://platform.kimi.com/docs/guide/agent-support)）：
 
@@ -48,7 +48,7 @@ Claude Code 分两类配置：
 | volcengine | https://ark.cn-beijing.volces.com/api/v3 | 用户指定 |
 | qwen | https://dashscope.aliyuncs.com/compatible-mode/v1 | qwen-plus |
 
-`cursor` Agent 仍跳过 Provider 写入，依赖 Cursor 账号登录。
+`cursor` Agent 仍跳过 Provider 写入，依赖 Cursor 账号登录。Claude Code 第三方 Provider 必须写入 `config.toml`，否则 `cc-connect daemon` 由 launchd 启动时不会继承交互式 shell 的 `~/.zshrc`，容易出现 `Not logged in. Please run /login.`。
 
 ## 配置模型
 

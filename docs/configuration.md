@@ -121,9 +121,11 @@ provider = "anthropic"
 provider_refs = ["anthropic"]
 ```
 
-### 第三方 LLM（写入 ~/.zshrc）
+### 第三方 LLM（写入 config.toml，并同步 ~/.zshrc）
 
-OpenAI、OpenRouter、Kimi、火山、通义及自定义 OpenAI-compatible **不写入** `config.toml`，而是写入 `~/.zshrc` 中带标记的环境变量块，供 Claude Code 通过 `ANTHROPIC_*` 变量路由。
+OpenAI、OpenRouter、Kimi、火山、通义及自定义 OpenAI-compatible 会写入 `config.toml` 的 `[[providers]]`，并在 `[projects.agent.options]` 中引用该 provider。这样 `cc-connect daemon` 由 launchd 拉起时也能读取凭证，不依赖交互式 shell 的 `~/.zshrc`。
+
+同时，bootstrap 会同步写入 `~/.zshrc` 中带标记的 `ANTHROPIC_*` 环境变量块，方便你在终端里直接运行 `claude` 调试。
 
 bootstrap 选项 3–8 会生成类似：
 
@@ -153,6 +155,26 @@ claude
 | 通义 | https://dashscope.aliyuncs.com/compatible-mode/v1 | qwen-plus |
 
 不要把 `~/.cc-connect/config.toml` 或含 API Key 的 `~/.zshrc` 片段提交到 GitHub。
+
+## 会话和显示默认值
+
+生成配置默认关闭空闲自动换 session：
+
+```toml
+[[projects]]
+reset_on_idle_mins = 0
+```
+
+这样 Claude Code 运行时不会因为长时间没有用户消息而自动切到新 session。需要恢复 cc-connect 上游默认行为时，可改成 `30` 或删除该项。
+
+聊天平台默认隐藏工具调用进度，避免每次工具调用都刷屏：
+
+```toml
+[display]
+mode = "compact"
+thinking_messages = false
+tool_messages = false
+```
 
 ## 启动服务
 

@@ -4,11 +4,11 @@ import "fmt"
 
 // ProviderPreset is a built-in LLM provider choice for Claude Code runtime.
 type ProviderPreset struct {
-	Name             string
-	DisplayName      string
-	DefaultBaseURL   string
-	DefaultModel     string
-	ClaudeCodeShell  bool
+	Name              string
+	DisplayName       string
+	DefaultBaseURL    string
+	DefaultModel      string
+	ClaudeCodeShell   bool
 	BuildShellProfile func(apiKey, model, baseURL string) ClaudeCodeShellProfile
 }
 
@@ -50,11 +50,16 @@ func providerPresetByName(name string) (ProviderPreset, bool) {
 }
 
 func configureClaudeCodeShellFromPreset(p *prompt, preset ProviderPreset) error {
-	keyLabel := fmt.Sprintf("请输入 %s API Key，将写入 ~/.zshrc（不会写入 config.toml）", preset.DisplayName)
+	_, err := configureClaudeCodeProviderFromPreset(p, preset)
+	return err
+}
+
+func configureClaudeCodeProviderFromPreset(p *prompt, preset ProviderPreset) (ProviderConfig, error) {
+	keyLabel := fmt.Sprintf("请输入 %s API Key，将写入 config.toml，并同步写入 ~/.zshrc 供直接运行 claude 使用", preset.DisplayName)
 	key := p.askSecret(keyLabel)
 	if key == "" {
-		warn("API Key 为空，跳过环境变量配置")
-		return nil
+		warn("API Key 为空，跳过 Provider 和环境变量配置")
+		return ProviderConfig{}, nil
 	}
 	baseURL := preset.DefaultBaseURL
 	if preset.DefaultBaseURL != "" {
@@ -69,5 +74,14 @@ func configureClaudeCodeShellFromPreset(p *prompt, preset ProviderPreset) error 
 	if preset.Name == "kimi" {
 		docURL = "https://platform.kimi.com/docs/guide/agent-support"
 	}
-	return configureClaudeCodeShellEnv(p, profile, docURL)
+	cfg := ProviderConfig{
+		Name:    preset.Name,
+		APIKey:  key,
+		BaseURL: baseURL,
+		Model:   model,
+	}
+	if err := configureClaudeCodeShellEnv(p, profile, docURL); err != nil {
+		return cfg, err
+	}
+	return cfg, nil
 }

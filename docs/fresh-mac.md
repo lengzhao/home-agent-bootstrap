@@ -56,7 +56,7 @@ mode = "default"
 LLM 配置方式：
 
 - 使用 `claude` 交互式登录，适合个人订阅或 Claude Code 常规使用。
-- 官方 Anthropic API Key 写入 `config.toml`；其他第三方 LLM（OpenAI、OpenRouter、Kimi、火山、通义等）写入 `~/.zshrc` 环境变量，完成后执行 `source ~/.zshrc` 再运行 `claude`。
+- 官方 Anthropic API Key 写入 `config.toml`；其他第三方 LLM（OpenAI、OpenRouter、Kimi、火山、通义等）也会写入 `config.toml` Provider，并同步写入 `~/.zshrc` 方便直接运行 `claude`。
 - 使用自定义 OpenAI-compatible Provider。
 
 接入平台见 [接入平台选择](platforms.md)。
@@ -103,3 +103,5 @@ go run . start
 ```bash
 cc-connect daemon logs -f
 ```
+
+默认生成的配置会关闭空闲自动换 session，并隐藏工具调用进度消息；如果希望恢复上游默认的 30 分钟自动换 session，可在 `config.toml` 中把 `reset_on_idle_mins` 改为 `30`。

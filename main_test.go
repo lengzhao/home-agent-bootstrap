@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bufio"
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
@@ -37,6 +39,12 @@ func TestRenderConfigOmitsAdminRoleWhenUnknown(t *testing.T) {
 	}
 	if !strings.Contains(got, `disabled_commands = ["shell", "show", "dir", "restart", "upgrade", "commands"]`) {
 		t.Fatalf("config should disable high-risk command ids for members:\n%s", got)
+	}
+	if !strings.Contains(got, `tool_messages = false`) {
+		t.Fatalf("config should hide tool progress messages by default:\n%s", got)
+	}
+	if !strings.Contains(got, `reset_on_idle_mins = 0`) {
+		t.Fatalf("config should disable idle session auto-rotation by default:\n%s", got)
 	}
 	if strings.Count(got, `type = "weixin"`) != 2 {
 		t.Fatalf("expected two weixin platform blocks:\n%s", got)
@@ -235,6 +243,28 @@ func TestRenderConfigIncludesOpenAICompatibleProviderOptions(t *testing.T) {
 		if !strings.Contains(got, want) {
 			t.Fatalf("config missing %q:\n%s", want, got)
 		}
+	}
+}
+
+func TestConfigureLLMReturnsProviderForClaudeCodePreset(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	input := strings.NewReader("3\nsk-openai\n\n\n")
+	var out bytes.Buffer
+	p := prompt{in: bufio.NewReader(input), out: &out}
+
+	got := configureLLM(&p, "claudecode")
+
+	if got.Name != "openai" {
+		t.Fatalf("provider name = %q, want openai", got.Name)
+	}
+	if got.APIKey != "sk-openai" {
+		t.Fatalf("provider api key = %q, want sk-openai", got.APIKey)
+	}
+	if got.BaseURL != "https://api.openai.com/v1" {
+		t.Fatalf("provider base url = %q, want default OpenAI base URL", got.BaseURL)
+	}
+	if got.Model != "gpt-4.1" {
+		t.Fatalf("provider model = %q, want gpt-4.1", got.Model)
 	}
 }
 

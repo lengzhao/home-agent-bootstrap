@@ -22,7 +22,7 @@ level = "info"
 [display]
 mode = "compact"
 thinking_messages = false
-tool_messages = true
+tool_messages = false
 thinking_max_len = 300
 tool_max_len = 500
 
@@ -53,7 +53,7 @@ timeout = 5
 
 [[projects]]
 name = {{ quote .ProjectName }}
-reset_on_idle_mins = 60
+reset_on_idle_mins = 0
 admin_from = {{ quote .AdminFrom }}
 
 [projects.users]

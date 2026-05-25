@@ -359,12 +359,12 @@ func configureLLM(p *prompt, agentType string) ProviderConfig {
 	fmt.Fprintln(os.Stdout, "选择 Claude Code 的 LLM 配置方式：")
 	fmt.Fprintln(os.Stdout, "1) 使用 Claude Code 自带登录，现在启动 claude 完成登录/授权")
 	fmt.Fprintln(os.Stdout, "2) Anthropic API Key")
-	fmt.Fprintln(os.Stdout, "3) OpenAI（写入 ~/.zshrc 环境变量）")
-	fmt.Fprintln(os.Stdout, "4) OpenRouter（写入 ~/.zshrc 环境变量）")
-	fmt.Fprintln(os.Stdout, "5) Kimi (Moonshot)（写入 ~/.zshrc，见 platform.kimi.com 文档）")
-	fmt.Fprintln(os.Stdout, "6) 火山引擎 (豆包)（写入 ~/.zshrc 环境变量）")
-	fmt.Fprintln(os.Stdout, "7) 通义千问 (DashScope)（写入 ~/.zshrc 环境变量）")
-	fmt.Fprintln(os.Stdout, "8) 自定义 OpenAI-compatible（写入 ~/.zshrc 环境变量）")
+	fmt.Fprintln(os.Stdout, "3) OpenAI（写入 config.toml Provider，并同步 ~/.zshrc）")
+	fmt.Fprintln(os.Stdout, "4) OpenRouter（写入 config.toml Provider，并同步 ~/.zshrc）")
+	fmt.Fprintln(os.Stdout, "5) Kimi (Moonshot)（写入 config.toml Provider，并同步 ~/.zshrc）")
+	fmt.Fprintln(os.Stdout, "6) 火山引擎 (豆包)（写入 config.toml Provider，并同步 ~/.zshrc）")
+	fmt.Fprintln(os.Stdout, "7) 通义千问 (DashScope)（写入 config.toml Provider，并同步 ~/.zshrc）")
+	fmt.Fprintln(os.Stdout, "8) 自定义 OpenAI-compatible（写入 config.toml Provider，并同步 ~/.zshrc）")
 	fmt.Fprintln(os.Stdout, "9) 暂不配置")
 	choice := p.askAllowed("请选择", "1", []string{"1", "2", "3", "4", "5", "6", "7", "8", "9"})
 	switch choice {
@@ -378,36 +378,46 @@ func configureLLM(p *prompt, agentType string) ProviderConfig {
 		warn("API Key 为空，跳过 Provider 写入")
 	case "3":
 		if preset, ok := providerPresetByName("openai"); ok {
-			if err := configureClaudeCodeShellFromPreset(p, preset); err != nil {
+			provider, err := configureClaudeCodeProviderFromPreset(p, preset)
+			if err != nil {
 				warn(err.Error())
 			}
+			return provider
 		}
 	case "4":
 		if preset, ok := providerPresetByName("openrouter"); ok {
-			if err := configureClaudeCodeShellFromPreset(p, preset); err != nil {
+			provider, err := configureClaudeCodeProviderFromPreset(p, preset)
+			if err != nil {
 				warn(err.Error())
 			}
+			return provider
 		}
 	case "5":
 		if preset, ok := providerPresetByName("kimi"); ok {
-			if err := configureClaudeCodeShellFromPreset(p, preset); err != nil {
+			provider, err := configureClaudeCodeProviderFromPreset(p, preset)
+			if err != nil {
 				warn(err.Error())
 			}
+			return provider
 		}
 	case "6":
 		if preset, ok := providerPresetByName("volcengine"); ok {
-			if err := configureClaudeCodeShellFromPreset(p, preset); err != nil {
+			provider, err := configureClaudeCodeProviderFromPreset(p, preset)
+			if err != nil {
 				warn(err.Error())
 			}
+			return provider
 		}
 	case "7":
 		if preset, ok := providerPresetByName("qwen"); ok {
-			if err := configureClaudeCodeShellFromPreset(p, preset); err != nil {
+			provider, err := configureClaudeCodeProviderFromPreset(p, preset)
+			if err != nil {
 				warn(err.Error())
 			}
+			return provider
 		}
 	case "8":
-		key := p.askSecret("请输入 API Key，将写入 ~/.zshrc（不会写入 config.toml）")
+		key := p.askSecret("请输入 API Key，将写入 config.toml，并同步写入 ~/.zshrc")
 		if key != "" {
 			baseURL := p.ask("ANTHROPIC_BASE_URL（OpenAI-compatible 接口地址）", "")
 			model := p.ask("模型 ID", "")
@@ -415,8 +425,9 @@ func configureLLM(p *prompt, agentType string) ProviderConfig {
 			if err := configureClaudeCodeShellEnv(p, profile, ""); err != nil {
 				warn(err.Error())
 			}
+			return ProviderConfig{Name: "custom", APIKey: key, BaseURL: baseURL, Model: model}
 		} else {
-			warn("API Key 为空，跳过环境变量配置")
+			warn("API Key 为空，跳过 Provider 和环境变量配置")
 		}
 	case "9":
 		warn("已跳过 LLM 配置。启动前请确保 claude 已登录或 provider 已配置。")
