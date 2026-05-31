@@ -14,9 +14,9 @@
 Release 安装（推荐）：
 
 ```bash
-# 以 v0.1.0 为例，按你的 CPU 选择 darwin-arm64 / darwin-amd64 / linux-amd64
+# 以 v0.1.1 为例，按你的 CPU 选择 darwin-arm64 / darwin-amd64 / linux-amd64
 curl -L -o home-agent-bootstrap \
-  https://github.com/lengzhao/home-agent-bootstrap/releases/download/v0.1.0/home-agent-bootstrap-darwin-arm64
+  https://github.com/lengzhao/home-agent-bootstrap/releases/download/v0.1.1/home-agent-bootstrap-darwin-arm64
 chmod +x home-agent-bootstrap
 ./home-agent-bootstrap bootstrap
 ```
