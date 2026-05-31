@@ -154,19 +154,20 @@ func TestRenderConfigGoldenOpenAI(t *testing.T) {
 
 func goldenRenderConfigInput() RenderConfigInput {
 	return RenderConfigInput{
-		DataDir:         "/Users/me/.cc-connect",
-		Workspace:       "/Users/me/home-assistant-workspace",
-		ProjectName:     "home",
-		AgentType:       "claudecode",
-		AgentMode:       "auto",
-		ManagementToken: "mgmt-token",
-		BridgeToken:     "bridge-token",
-		WebhookToken:    "hook-token",
-		ProviderName:    "openai",
-		ProviderAPIKey:  "sk-openai",
-		ProviderBaseURL: "https://api.openai.com/v1",
-		ProviderModel:   "gpt-4.1",
-		Platforms:       []PlatformBlock{testWeixinPlatform("wx-main", "")},
+		DataDir:                "/Users/me/.cc-connect",
+		Workspace:              "/Users/me/home-assistant-workspace",
+		ProjectName:            "home",
+		AgentType:              "claudecode",
+		AgentMode:              "auto",
+		ManagementToken:        "mgmt-token",
+		BridgeToken:            "bridge-token",
+		WebhookToken:           "hook-token",
+		ProviderName:           "openai",
+		ProviderAPIKey:         "sk-openai",
+		ProviderBaseURL:        "https://api.openai.com/v1",
+		ProviderModel:          "gpt-4.1",
+		Platforms:              []PlatformBlock{testWeixinPlatform("wx-main", "")},
+		MemberDisabledCommands: memberDisabledCommands("family-remind"),
 	}
 }
 

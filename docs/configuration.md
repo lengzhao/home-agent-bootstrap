@@ -221,7 +221,14 @@ cc-connect daemon restart
 
 ## Heartbeat
 
-生成的配置里会包含注释状态的 Heartbeat 示例。完成首次对话后，可通过 `/status` 或日志确认目标会话的 `session_key`，再取消注释：
+生成的配置里会包含注释状态的 Heartbeat 示例。bootstrap 完成后会提示启用步骤：
+
+1. 完成首次对话
+2. 在聊天里发送 `/status` 获取 `session_key`
+3. 编辑 `config.toml`，取消 `[projects.heartbeat]` 注释并填入 `session_key`
+4. 执行 `cc-connect daemon restart`
+
+示例配置：
 
 ```toml
 [projects.heartbeat]
@@ -233,3 +240,55 @@ silent = true
 timeout_mins = 10
 prompt = "读取 HEARTBEAT.md，检查今天家庭提醒、待办、异常事项，只在需要时提醒。"
 ```
+
+## 权限模板
+
+bootstrap 可选择三种 member 角色权限模板：
+
+| 模板 | 说明 |
+|------|------|
+| admin-only | 仅管理员可执行工具和高危命令 |
+| family-readonly | 家人只读问答，禁用 cron/provider 等管理命令 |
+| family-remind | 默认可提醒，禁用 shell/restart 等高危命令 |
+
+非交互模式可通过 `PERMISSION_TEMPLATE` 指定。
+
+## 非交互 bootstrap
+
+完整环境变量说明与示例请运行：
+
+```bash
+home-agent-bootstrap help
+```
+
+设置 `NONINTERACTIVE=1` 可跳过问答，配合环境变量预设：
+
+| 变量 | 说明 |
+|------|------|
+| CONFIG_PATH | 配置文件路径 |
+| WORKSPACE | 工作目录 |
+| PROJECT_NAME | project 名称 |
+| AGENT_TYPE | claudecode 或 cursor |
+| AGENT_MODE | Agent 权限模式 |
+| PERMISSION_TEMPLATE | admin-only / family-readonly / family-remind |
+| PLATFORM_CHOICES | 平台序号，如 7 或 1,7 |
+| LLM_CHOICE | Claude Code LLM 选项 1-9 |
+| LLM_API_KEY | 非交互 Provider API Key |
+| SKIP_WEIXIN_SETUP=1 | 跳过微信扫码 |
+| OVERWRITE_CONFIG=1 | 覆盖已有配置 |
+
+示例：
+
+```bash
+NONINTERACTIVE=1 \
+  WORKSPACE="$HOME/home-assistant-workspace" \
+  PERMISSION_TEMPLATE=family-remind \
+  PLATFORM_CHOICES=7 \
+  LLM_CHOICE=1 \
+  SKIP_WEIXIN_SETUP=1 \
+  home-agent-bootstrap bootstrap
+```
+
+## 工作区模板同步
+
+bootstrap 会补全缺失的工作区文件，不会覆盖已有内容。工作区根目录的 `VERSION` 表示模板版本；若低于当前 bootstrap 版本，会提示有新模板可用。

@@ -38,6 +38,7 @@
 本工作目录的 `skills/` 目录包含默认技能。遇到匹配场景时先阅读对应 `SKILL.md`，再执行。
 
 - `skills/cc-connect/SKILL.md`：cc-connect CLI、Cron、文件回传、微信绑定、daemon 和诊断。
+- `skills/home-routines/SKILL.md`：家庭提醒、待办、账单周期和设备控制前确认。
 - `skills/skill-maintenance/SKILL.md`：创建、整理、合并或重写家庭助手技能。
 
 技能是按需调用的工具说明，不要每次回复都展开技能内容。

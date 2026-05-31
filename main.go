@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -24,21 +23,23 @@ const appName = "home-agent-bootstrap"
 var workspaceTemplates embed.FS
 
 type RenderConfigInput struct {
-	ConfigPath      string
-	DataDir         string
-	Workspace       string
-	ProjectName     string
-	AgentType       string
-	AgentMode       string
-	ManagementToken string
-	BridgeToken     string
-	WebhookToken    string
-	AdminFrom       string
-	ProviderName    string
-	ProviderAPIKey  string
-	ProviderBaseURL string
-	ProviderModel   string
-	Platforms       []PlatformBlock
+	ConfigPath             string
+	DataDir                string
+	Workspace              string
+	ProjectName            string
+	AgentType              string
+	AgentMode              string
+	ManagementToken        string
+	BridgeToken            string
+	WebhookToken           string
+	AdminFrom              string
+	ProviderName           string
+	ProviderAPIKey         string
+	ProviderBaseURL        string
+	ProviderModel          string
+	Platforms              []PlatformBlock
+	PermissionTemplate     string
+	MemberDisabledCommands []string
 }
 
 type prompt struct {
@@ -72,93 +73,169 @@ func run(args []string) error {
 	case "start":
 		return runStart()
 	case "help", "-h", "--help":
-		printUsage()
+		printUsage(os.Stdout)
 		return nil
 	default:
 		return fmt.Errorf("未知命令 %q，运行 %s help 查看用法", cmd, appName)
 	}
 }
 
-func printUsage() {
-	fmt.Printf(`%s - cc-connect 家庭超级助手引导器
+func printUsage(out io.Writer) {
+	defaults := defaultBootstrapSettings()
+	fmt.Fprintf(out, `%s - cc-connect 家庭超级助手引导器
 
 用法:
-  %s bootstrap       全新 Mac 引导安装和生成配置，默认命令
+  %s                 交互引导安装，默认命令，大部分问题直接回车即可
+  %s bootstrap       同上
   %s doctor          检查本机依赖和 cc-connect 状态
   %s migrate-config  将旧版 [[providers]] 迁移到 [[projects.agent.providers]]
   %s setup-weixin N  按平台顺序扫码绑定 N 个微信个人号
   %s start           安装并启动 cc-connect daemon
+  %s help            显示本帮助
 
-环境变量:
-  CONFIG_PATH        cc-connect 配置路径，默认 ~/.cc-connect/config.toml
-  PROJECT_NAME       cc-connect project 名称，默认 home
-  INSTALL_DEPS=0     跳过 Homebrew、Node、ffmpeg 等系统依赖安装
-`, appName, appName, appName, appName, appName, appName)
+交互模式默认配置（直接回车即可）:
+  配置文件         %s
+  工作目录         %s
+  project 名称     %s
+  Agent            %s，权限模式 %s
+  权限模板         %s
+  平台序号         %s（微信个人号）
+  LLM 选项         %s（Claude Code 自带登录）
+  微信个人号数量   1
+  是否现在扫码     是
+
+通用环境变量（交互和非交互均可预设，会作为问答默认值）:
+  CONFIG_PATH          cc-connect 配置路径
+                       默认 %s
+  WORKSPACE            家庭助手工作目录
+                       默认 %s
+  PROJECT_NAME         cc-connect project 名称，默认 %s
+  AGENT_TYPE           claudecode 或 cursor，默认 %s
+  AGENT_MODE           Agent 权限模式
+                       Claude Code 默认 auto，Cursor 默认 default
+  PERMISSION_TEMPLATE  admin-only / family-readonly / family-remind
+                       默认 %s
+  PLATFORM_CHOICES     平台序号，如 7 或 1,7，默认 %s
+  LLM_CHOICE           Claude Code LLM 选项 1-9，默认 %s
+  INSTALL_DEPS=0       跳过 Homebrew、Node、ffmpeg 等系统依赖安装
+
+非交互模式（跳过全部问答）:
+  NONINTERACTIVE=1     或 BOOTSTRAP_YES=1
+  OVERWRITE_CONFIG=1   覆盖已有 config.toml，默认不覆盖
+  SKIP_WEIXIN_SETUP=1  跳过微信扫码
+  ADMIN_FROM           管理员 user_id，可留空稍后补充
+  WEIXIN_COUNT         微信个人号数量，默认 1
+  WEIXIN_ACCOUNT_ID    第一个微信 account_id，默认 wx-1
+
+LLM Provider 环境变量（NONINTERACTIVE 且 LLM_CHOICE 对应时使用）:
+  LLM_CHOICE=1         Claude Code 自带登录，无需额外变量
+  LLM_CHOICE=2         需要 ANTHROPIC_API_KEY
+  LLM_CHOICE=3-7       需要 LLM_API_KEY，可选 LLM_BASE_URL、LLM_MODEL
+  LLM_CHOICE=8         自定义 OpenAI-compatible，需要 LLM_API_KEY
+  LLM_CHOICE=9         暂不配置 LLM
+
+非交互示例（微信个人号 + Claude Code 自带登录）:
+  NONINTERACTIVE=1 SKIP_WEIXIN_SETUP=1 home-agent-bootstrap bootstrap
+
+非交互示例（指定工作目录和 OpenAI Provider）:
+  NONINTERACTIVE=1 \
+    WORKSPACE="$HOME/home-assistant-workspace" \
+    PERMISSION_TEMPLATE=family-remind \
+    PLATFORM_CHOICES=7 \
+    LLM_CHOICE=3 \
+    LLM_API_KEY="sk-..." \
+    SKIP_WEIXIN_SETUP=1 \
+    home-agent-bootstrap bootstrap
+
+更多说明见 docs/configuration.md
+`, appName,
+		appName, appName, appName, appName, appName, appName, appName,
+		defaults.ConfigPath,
+		defaults.Workspace,
+		defaults.ProjectName,
+		defaults.AgentType, defaults.AgentMode,
+		defaults.PermissionTemplate,
+		defaults.PlatformChoices,
+		defaults.LLMChoice,
+		defaults.ConfigPath,
+		defaults.Workspace,
+		defaults.ProjectName,
+		defaults.AgentType,
+		defaults.PermissionTemplate,
+		defaults.PlatformChoices,
+		defaults.LLMChoice,
+	)
 }
 
 func runBootstrap() error {
 	p := prompt{in: bufio.NewReader(os.Stdin), out: os.Stdout}
 
 	say("开始配置个人家庭超级助手")
+	if !nonInteractive() {
+		printBootstrapQuickGuide(p.out)
+	}
 
 	if os.Getenv("INSTALL_DEPS") != "0" {
-		installXcodeCLTIfNeeded(&p)
-		installHomebrewIfNeeded(&p)
-		installBasePackagesIfNeeded(&p)
+		if err := installXcodeCLTIfNeeded(&p); err != nil {
+			return err
+		}
+		if err := installHomebrewIfNeeded(&p); err != nil {
+			return err
+		}
+		if err := installBasePackagesIfNeeded(&p); err != nil {
+			return err
+		}
 	} else {
 		warn("INSTALL_DEPS=0，跳过系统依赖安装")
 	}
 
-	installCCConnectIfNeeded(&p)
-
-	defaultConfig := filepath.Join(homeDir(), ".cc-connect", "config.toml")
-	defaultWorkspace := filepath.Join(homeDir(), "home-assistant-workspace")
-
-	configPath := p.ask("cc-connect 配置文件路径", defaultConfig)
-	workspace := p.ask("家庭助手工作目录", defaultWorkspace)
-	projectName := p.ask("cc-connect project 名称", "home")
-
-	fmt.Fprintln(os.Stdout, "选择运行时 Agent：")
-	fmt.Fprintln(os.Stdout, "1) Claude Code，推荐用于家庭助手运行时")
-	fmt.Fprintln(os.Stdout, "2) Cursor Agent，适合只读/规划或开发维护")
-	agentChoice := p.askAllowed("请选择", "1", []string{"1", "2"})
-
-	agentType := "claudecode"
-	agentMode := "auto"
-	if agentChoice == "2" {
-		agentType = "cursor"
-		agentMode = p.askAllowed("Cursor Agent 默认权限模式", "default", []string{"ask", "plan", "default", "force"})
-	} else {
-		printClaudeCodeModeHelp()
-		agentMode = p.askAllowed("Claude Code 默认权限模式", "auto", []string{"default", "plan", "auto", "acceptEdits"})
-	}
-	if err := validateAgentMode(agentType, agentMode); err != nil {
+	if err := installCCConnectIfNeeded(&p); err != nil {
 		return err
 	}
 
-	installAgentIfNeeded(&p, agentType)
-	provider := configureLLM(&p, agentType)
+	settings := loadBootstrapSettings(&p)
+	if err := validateAgentMode(settings.AgentType, settings.AgentMode); err != nil {
+		return err
+	}
 
-	platforms, err := configurePlatforms(&p)
+	if err := installAgentIfNeeded(&p, settings.AgentType); err != nil {
+		return err
+	}
+	provider := chooseLLM(&p, settings, settings.AgentType)
+
+	platforms, err := choosePlatforms(&p, settings)
 	if err != nil {
 		return err
 	}
 
 	adminFrom := ""
 	if hasWeixinPlatform(platforms) {
-		adminFrom = p.ask("管理员微信 ilink user_id，未知可先留空，扫码后再修改", "")
+		if nonInteractive() {
+			adminFrom = envDefault("ADMIN_FROM", "")
+		} else {
+			adminFrom = p.ask("管理员微信 ilink user_id，未知可先留空，扫码后再修改", "")
+		}
 		if adminFrom == "" {
 			warn("admin_from 为空时，特权命令不会授予任何用户。扫码后请用 /whoami 获取 user_id 并补充配置。")
 		}
 	} else {
-		adminFrom = p.ask("管理员 user_id（平台相关），未知可先留空", "")
+		if nonInteractive() {
+			adminFrom = envDefault("ADMIN_FROM", "")
+		} else {
+			adminFrom = p.ask("管理员 user_id（平台相关），未知可先留空", "")
+		}
 		if adminFrom == "" {
 			warn("admin_from 为空时，特权命令不会授予任何用户。请在各平台完成首次对话后用 /whoami 获取 id 并补充配置。")
 		}
 	}
 
+	configPath := settings.ConfigPath
 	if exists(configPath) {
-		if !p.askYesNo("配置文件已存在，是否备份并覆盖", false) {
+		overwrite := settings.OverwriteConfig
+		if !nonInteractive() {
+			overwrite = p.askYesNo("配置文件已存在，是否备份并覆盖", false)
+		}
+		if !overwrite {
 			return errors.New("已取消，未覆盖现有配置")
 		}
 		if err := backupFile(configPath); err != nil {
@@ -166,29 +243,34 @@ func runBootstrap() error {
 		}
 	}
 
-	if err := writeWorkspaceFiles(workspace); err != nil {
+	report, err := syncWorkspaceFiles(settings.Workspace)
+	if err != nil {
 		return err
 	}
-	if agentType == "claudecode" {
-		initializeClaudeCodeWorkspace(workspace)
+	printWorkspaceSyncReport(report)
+
+	if settings.AgentType == "claudecode" && !nonInteractive() {
+		initializeClaudeCodeWorkspace(settings.Workspace)
 	}
 
 	cfg := RenderConfigInput{
-		ConfigPath:      configPath,
-		DataDir:         filepath.Join(homeDir(), ".cc-connect"),
-		Workspace:       workspace,
-		ProjectName:     projectName,
-		AgentType:       agentType,
-		AgentMode:       agentMode,
-		ManagementToken: mustRandomToken(),
-		BridgeToken:     mustRandomToken(),
-		WebhookToken:    mustRandomToken(),
-		AdminFrom:       adminFrom,
-		ProviderName:    provider.Name,
-		ProviderAPIKey:  provider.APIKey,
-		ProviderBaseURL: provider.BaseURL,
-		ProviderModel:   provider.Model,
-		Platforms:       platforms,
+		ConfigPath:             configPath,
+		DataDir:                filepath.Join(homeDir(), ".cc-connect"),
+		Workspace:              settings.Workspace,
+		ProjectName:            settings.ProjectName,
+		AgentType:              settings.AgentType,
+		AgentMode:              settings.AgentMode,
+		ManagementToken:        mustRandomToken(),
+		BridgeToken:            mustRandomToken(),
+		WebhookToken:           mustRandomToken(),
+		AdminFrom:              adminFrom,
+		ProviderName:           provider.Name,
+		ProviderAPIKey:         provider.APIKey,
+		ProviderBaseURL:        provider.BaseURL,
+		ProviderModel:          provider.Model,
+		Platforms:              platforms,
+		PermissionTemplate:     settings.PermissionTemplate,
+		MemberDisabledCommands: memberDisabledCommands(settings.PermissionTemplate),
 	}
 	if err := writeFile(configPath, []byte(renderConfig(cfg)), 0o600); err != nil {
 		return err
@@ -196,8 +278,12 @@ func runBootstrap() error {
 
 	weixinCount := countWeixinPlatforms(platforms)
 	weixinSetupDone := false
-	if weixinCount > 0 && p.askYesNo("是否现在逐个扫码绑定微信个人号", true) {
-		if err := runSetupWeixinWithConfig(configPath, projectName, weixinCount); err != nil {
+	setupWeixin := weixinCount > 0 && !settings.SkipWeixinSetup
+	if !nonInteractive() && weixinCount > 0 {
+		setupWeixin = p.askYesNo("是否现在逐个扫码绑定微信个人号", true)
+	}
+	if setupWeixin {
+		if err := runSetupWeixinWithConfig(configPath, settings.ProjectName, weixinCount); err != nil {
 			return err
 		}
 		if err := completeAdminRoleAfterWeixinSetup(&p, configPath); err != nil {
@@ -206,7 +292,7 @@ func runBootstrap() error {
 		weixinSetupDone = true
 	}
 
-	printNextSteps(configPath, projectName, platforms, agentType, weixinSetupDone)
+	printNextSteps(configPath, settings.ProjectName, platforms, settings.AgentType, weixinSetupDone)
 	return nil
 }
 
@@ -218,12 +304,17 @@ func renderConfig(cfg RenderConfigInput) string {
 
 	data := struct {
 		RenderConfigInput
-		AdminUserIDs []string
-		AuditCommand string
+		AdminUserIDs           []string
+		AuditCommand           string
+		MemberDisabledCommands []string
 	}{
-		RenderConfigInput: cfg,
-		AdminUserIDs:      optionalStringSlice(cfg.AdminFrom),
-		AuditCommand:      auditCmd,
+		RenderConfigInput:      cfg,
+		AdminUserIDs:           optionalStringSlice(cfg.AdminFrom),
+		AuditCommand:           auditCmd,
+		MemberDisabledCommands: cfg.MemberDisabledCommands,
+	}
+	if len(data.MemberDisabledCommands) == 0 {
+		data.MemberDisabledCommands = memberDisabledCommands(defaultPermissionTemplate)
 	}
 
 	tmpl := template.Must(template.New("config.generated.toml.tmpl").Funcs(template.FuncMap{
@@ -266,81 +357,118 @@ func printClaudeCodeModeHelp() {
 	fmt.Fprintln(os.Stdout, "- acceptEdits：自动接受编辑，风险更高，首次部署不建议。")
 }
 
-func installXcodeCLTIfNeeded(p *prompt) {
+func installXcodeCLTIfNeeded(p *prompt) error {
 	if exec.Command("xcode-select", "-p").Run() == nil {
 		say("已检测到 Xcode Command Line Tools")
-		return
+		return nil
 	}
 	warn("未检测到 Xcode Command Line Tools")
-	if p.askYesNo("是否现在安装 Xcode Command Line Tools", true) {
-		_ = runCommand("xcode-select", "--install")
-		fmt.Fprintln(os.Stdout, "请在弹窗中完成安装。安装完成后回到终端按回车继续。")
-		_, _ = p.in.ReadString('\n')
+	if !p.askYesNo("是否现在安装 Xcode Command Line Tools", true) {
+		return nil
 	}
+	if err := runCommand("xcode-select", "--install"); err != nil {
+		return fmt.Errorf("安装 Xcode Command Line Tools 失败: %w", err)
+	}
+	fmt.Fprintln(os.Stdout, "请在弹窗中完成安装。安装完成后回到终端按回车继续。")
+	_, _ = p.in.ReadString('\n')
+	return nil
 }
 
-func installHomebrewIfNeeded(p *prompt) {
+func installHomebrewIfNeeded(p *prompt) error {
 	addHomebrewToPath()
 	if commandExists("brew") {
 		say("已检测到 Homebrew")
-		return
+		return nil
 	}
 	warn("未检测到 Homebrew")
-	if p.askYesNo("是否现在安装 Homebrew", true) {
-		_ = runCommand("/bin/bash", "-c", `$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)`)
-		addHomebrewToPath()
+	if !p.askYesNo("是否现在安装 Homebrew", true) {
+		return nil
 	}
+	if err := runCommand("/bin/bash", "-c", `$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)`); err != nil {
+		return fmt.Errorf("安装 Homebrew 失败: %w", err)
+	}
+	addHomebrewToPath()
+	if !commandExists("brew") {
+		return errors.New("Homebrew 安装后仍未检测到 brew 命令")
+	}
+	return nil
 }
 
-func installBasePackagesIfNeeded(p *prompt) {
+func installBasePackagesIfNeeded(p *prompt) error {
 	if !commandExists("brew") {
 		warn("未检测到 brew，跳过基础包自动安装")
-		return
+		return nil
 	}
 	if (!commandExists("node") || !commandExists("npm")) && p.askYesNo("是否使用 brew 安装 Node.js/npm", true) {
-		_ = runCommand("brew", "install", "node")
+		if err := runCommand("brew", "install", "node"); err != nil {
+			return fmt.Errorf("安装 Node.js/npm 失败: %w", err)
+		}
 	}
 	if !commandExists("ffmpeg") && p.askYesNo("是否使用 brew 安装 ffmpeg，用于微信语音转写", true) {
-		_ = runCommand("brew", "install", "ffmpeg")
+		if err := runCommand("brew", "install", "ffmpeg"); err != nil {
+			return fmt.Errorf("安装 ffmpeg 失败: %w", err)
+		}
 	}
+	return nil
 }
 
-func installCCConnectIfNeeded(p *prompt) {
+func installCCConnectIfNeeded(p *prompt) error {
 	if commandExists("cc-connect") {
 		say("已检测到 cc-connect")
-		return
+		return nil
 	}
-	warn("未检测到 cc-connect")
-	if p.askYesNo("是否尝试使用 npm 全局安装 cc-connect", true) {
-		if !commandExists("npm") {
-			warn("未检测到 npm，无法自动安装 cc-connect")
-			return
-		}
-		_ = runCommand("npm", "install", "-g", "cc-connect")
+	if nonInteractive() {
+		return errors.New("未检测到 cc-connect，NONINTERACTIVE 模式下请先手动安装 cc-connect")
 	}
+	if !p.askYesNo("是否尝试使用 npm 全局安装 cc-connect", true) {
+		return nil
+	}
+	if !commandExists("npm") {
+		return errors.New("未检测到 npm，无法自动安装 cc-connect")
+	}
+	if err := runCommand("npm", "install", "-g", "cc-connect"); err != nil {
+		return fmt.Errorf("安装 cc-connect 失败: %w", err)
+	}
+	if !commandExists("cc-connect") {
+		return errors.New("cc-connect 安装后仍未检测到 cc-connect 命令")
+	}
+	return nil
 }
 
-func installAgentIfNeeded(p *prompt, agentType string) {
+func installAgentIfNeeded(p *prompt, agentType string) error {
 	switch agentType {
 	case "claudecode":
 		if commandExists("claude") {
 			say("已检测到 Claude Code CLI")
-			return
+			return nil
 		}
 		warn("未检测到 Claude Code CLI: claude")
-		if p.askYesNo("是否尝试使用 npm 全局安装 @anthropic-ai/claude-code", true) && commandExists("npm") {
-			_ = runCommand("npm", "install", "-g", "@anthropic-ai/claude-code")
+		if !p.askYesNo("是否尝试使用 npm 全局安装 @anthropic-ai/claude-code", true) {
+			return nil
+		}
+		if !commandExists("npm") {
+			return errors.New("未检测到 npm，无法自动安装 Claude Code CLI")
+		}
+		if err := runCommand("npm", "install", "-g", "@anthropic-ai/claude-code"); err != nil {
+			return fmt.Errorf("安装 Claude Code CLI 失败: %w", err)
 		}
 	case "cursor":
 		if commandExists("agent") {
 			say("已检测到 Cursor Agent CLI")
-			return
+			return nil
 		}
 		warn("未检测到 Cursor Agent CLI: agent")
-		if p.askYesNo("是否尝试使用 npm 全局安装 @anthropic-ai/cursor-agent", false) && commandExists("npm") {
-			_ = runCommand("npm", "install", "-g", "@anthropic-ai/cursor-agent")
+		if !p.askYesNo("是否尝试使用 npm 全局安装 @anthropic-ai/cursor-agent", false) {
+			return nil
+		}
+		if !commandExists("npm") {
+			return errors.New("未检测到 npm，无法自动安装 Cursor Agent CLI")
+		}
+		if err := runCommand("npm", "install", "-g", "@anthropic-ai/cursor-agent"); err != nil {
+			return fmt.Errorf("安装 Cursor Agent CLI 失败: %w", err)
 		}
 	}
+	return nil
 }
 
 type ProviderConfig struct {
@@ -452,8 +580,12 @@ func runDoctor() error {
 
 	if commandExists("cc-connect") {
 		fmt.Println("\n== cc-connect 版本 ==")
-		if version := ccConnectVersion(); version != "" {
+		version := ccConnectVersion()
+		if version != "" {
 			fmt.Printf("OK   %s\n", version)
+			if !compareVersionAtLeast(version, minCCConnectVersion) {
+				fmt.Printf("WARN cc-connect 版本低于建议最低版本 %s\n", minCCConnectVersion)
+			}
 		} else {
 			fmt.Println("WARN 无法读取 cc-connect 版本")
 		}
@@ -645,31 +777,8 @@ func claudeWorkspaceInitCommand(workspace string) (string, []string, string) {
 }
 
 func writeWorkspaceFiles(workspace string) error {
-	return fs.WalkDir(workspaceTemplates, "workspace", func(path string, entry fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if entry.IsDir() {
-			return nil
-		}
-		rel, err := filepath.Rel("workspace", path)
-		if err != nil {
-			return err
-		}
-		target := filepath.Join(workspace, rel)
-		if exists(target) {
-			// Preserve user-edited skills and instruction files across reruns.
-			return nil
-		}
-		content, err := workspaceTemplates.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		if err := writeFile(target, content, 0o644); err != nil {
-			return err
-		}
-		return nil
-	})
+	_, err := syncWorkspaceFiles(workspace)
+	return err
 }
 
 func (p prompt) ask(label, defaultValue string) string {
@@ -687,6 +796,9 @@ func (p prompt) ask(label, defaultValue string) string {
 }
 
 func (p prompt) askYesNo(label string, defaultValue bool) bool {
+	if nonInteractive() {
+		return defaultValue
+	}
 	def := "n"
 	if defaultValue {
 		def = "y"
@@ -762,6 +874,9 @@ func printNextSteps(configPath, projectName string, platforms []PlatformBlock, a
 	step++
 	fmt.Printf("\n%d. Web 管理后台：\n", step)
 	fmt.Println("   http://localhost:9820")
+	step++
+	fmt.Printf("\n%d. 启用 Heartbeat（可选）：\n", step)
+	fmt.Println("   " + heartbeatSetupGuide())
 
 	if weixinCount > 0 && !weixinSetupDone {
 		fmt.Println("\n注意：" + weixinFirstMessageInstruction())

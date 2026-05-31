@@ -4,4 +4,13 @@
 
 ## 成员
 
-- 待补充。
+| 称呼 | 角色 | 提醒偏好 | 备注 |
+|------|------|----------|------|
+| 管理员 | admin | 重要事项即时提醒 | 可通过 /whoami 获取平台 user_id |
+| 家人A | member | 晚间汇总待办 | 不要写入手机号、证件号 |
+| 家人B | member | 仅工作日早上提醒 | 可补充作息和忌口 |
+
+## 使用说明
+
+- 管理员对应 `config.toml` 里的 `admin_from` 和 `projects.users.roles.admin`。
+- 家人的平台 user_id 可在首次对话后用 `/whoami` 获取，再写入 `allow_from` 白名单。

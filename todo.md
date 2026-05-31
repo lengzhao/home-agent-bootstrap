@@ -36,17 +36,17 @@ flowchart LR
 - [x] P0 补模板 golden test：确保 `templates/config.generated.toml.tmpl` 输出稳定
 - [x] P0 补平台一致性测试：`platforms.go` 与 `docs/platforms.md` 序号和 type 对齐
 - [x] P0 发布第一个稳定 Release：验证 CI、tag 构建、README 安装说明
-- [ ] P1 非交互 bootstrap 预设：支持 env/flags 跳过部分问答，便于重装和小主机自动化
-- [ ] P1 安装失败时明确报错：Homebrew、npm、cc-connect、daemon install 不再静默忽略关键错误
+- [x] P1 非交互 bootstrap 预设：支持 env/flags 跳过部分问答，便于重装和小主机自动化
+- [x] P1 安装失败时明确报错：Homebrew、npm、cc-connect、daemon install 不再静默忽略关键错误
 
 ## Phase 2 工作区 starter kit（P1）
 
 目标：从“安装脚本”升级为“家庭助手默认工作区发行版”。
 
-- [ ] P1 workspace 模板版本号：bootstrap 可提示“有新模板”，支持只补缺失文件
-- [ ] P1 Heartbeat 启用向导：首次对话后提示填写 `session_key` 并取消注释
-- [ ] P1 丰富 `members.md` / `devices.md` / `tasks.md` 示例，降低首次填写门槛
-- [ ] P1 补家庭场景技能包：提醒、待办、账单周期、设备控制前确认
+- [x] P1 workspace 模板版本号：bootstrap 可提示“有新模板”，支持只补缺失文件
+- [x] P1 Heartbeat 启用向导：首次对话后提示填写 `session_key` 并取消注释
+- [x] P1 丰富 `members.md` / `devices.md` / `tasks.md` 示例，降低首次填写门槛
+- [x] P1 补家庭场景技能包：提醒、待办、账单周期、设备控制前确认
 - [ ] P2 增加 `skills/` 模板校验：确保 frontmatter 和目录名一致
 - [ ] P2 提供“示例家庭助手”演示 workspace，供新用户参考
 
@@ -54,8 +54,8 @@ flowchart LR
 
 目标：让家庭场景默认更安全、更可审计。
 
-- [ ] P1 bootstrap 增加权限模板：仅自己可用 / 家人只读 / 家人可提醒不可执行
-- [ ] P1 文档和 skill 补 token 泄露恢复流程：停 daemon、轮换 token、重装绑定、查 audit log
+- [x] P1 bootstrap 增加权限模板：仅自己可用 / 家人只读 / 家人可提醒不可执行
+- [x] P1 文档和 skill 补 token 泄露恢复流程：停 daemon、轮换 token、重装绑定、查 audit log
 - [ ] P2 提供 management/bridge/webhook token 轮换 helper
 - [ ] P2 `doctor` 增加端口暴露检查：9820 / 9810 / 9111 是否仅本机可访问
 - [ ] P2 审计日志巡检 skill：定期查看 `~/.cc-connect/audit/events.log`
@@ -75,7 +75,7 @@ flowchart LR
 
 - [ ] P0 跟踪 cc-connect release changelog，更新 `platformPresets` / Provider 预设
 - [x] P0 文档示例与模板字段保持一致，改动模板时同步改 docs 和 tests
-- [ ] P1 增加 cc-connect 版本下限提示：bootstrap 或 doctor 检测过旧版本
+- [x] P1 增加 cc-connect 版本下限提示：bootstrap 或 doctor 检测过旧版本
 - [ ] P2 评估是否需要定期自动抓取上游平台列表做对照检查
 
 ---

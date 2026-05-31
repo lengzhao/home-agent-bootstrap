@@ -193,7 +193,7 @@ func parsePlatformChoices(raw string) ([]PlatformPreset, error) {
 
 func configurePlatforms(p *prompt) ([]PlatformBlock, error) {
 	printPlatformCatalog(p.out)
-	choices := p.ask("选择要接入的平台序号", "7")
+	choices := p.ask("选择要接入的平台序号", envDefault("PLATFORM_CHOICES", defaultPlatformChoice))
 	presets, err := parsePlatformChoices(choices)
 	if err != nil {
 		return nil, err

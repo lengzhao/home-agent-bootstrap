@@ -410,10 +410,12 @@ func TestWriteWorkspaceFilesIncludesDefaultSkills(t *testing.T) {
 		"CLAUDE.md",
 		"HOME.md",
 		"HEARTBEAT.md",
+		"VERSION",
 		"members.md",
 		"devices.md",
 		"tasks.md",
 		"skills/cc-connect/SKILL.md",
+		"skills/home-routines/SKILL.md",
 		"skills/skill-creator/SKILL.md",
 		"skills/skill-maintenance/SKILL.md",
 	} {

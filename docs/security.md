@@ -42,13 +42,13 @@ admin_from = "*"
 admin_from = "your_user_id@im.wechat"
 ```
 
-家人默认使用 `member` 角色，并禁用高危命令：
+家人默认使用 `member` 角色。bootstrap 提供三种权限模板：
 
-```toml
-[projects.users.roles.member]
-user_ids = ["*"]
-disabled_commands = ["shell", "show", "dir", "restart", "upgrade", "commands"]
-```
+| 模板 | 说明 |
+|------|------|
+| admin-only | 仅管理员可执行工具和高危命令 |
+| family-readonly | 家人只读问答，禁用 cron/provider 等管理命令 |
+| family-remind | 默认可提醒，禁用 shell/restart 等高危命令 |
 
 ## Token 管理
 
@@ -64,10 +64,11 @@ disabled_commands = ["shell", "show", "dir", "restart", "upgrade", "commands"]
 
 如果怀疑 token 泄露：
 
-1. 停止 daemon。
-2. 重新生成 token。
-3. 重新扫码绑定微信。
-4. 检查 `~/.cc-connect/audit/events.log`。
+1. 停止 daemon：`cc-connect daemon stop`
+2. 重新生成 `config.toml` 中的 management、bridge、webhook token，或重新运行 bootstrap 覆盖配置
+3. 微信个人号重新执行 `cc-connect weixin setup` 或 `home-agent-bootstrap setup-weixin N`
+4. 检查审计日志：`tail -n 100 ~/.cc-connect/audit/events.log`
+5. 恢复服务：`home-agent-bootstrap start`
 
 ## 端口暴露
 

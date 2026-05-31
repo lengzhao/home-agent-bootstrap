@@ -79,4 +79,14 @@ cc-connect doctor
 cc-connect daemon restart
 ```
 
-重启前说明影响：短时间内无法接收或回复消息，正在执行的任务可能被中断。若怀疑 token 泄露，先停止服务、重新生成 token、重新扫码，并检查审计日志。
+重启前说明影响：短时间内无法接收或回复消息，正在执行的任务可能被中断。
+
+## Token 泄露恢复
+
+若怀疑 management、bridge、webhook 或微信 token 泄露：
+
+1. 停止 daemon：`cc-connect daemon stop`
+2. 重新生成 `config.toml` 中的 token，或重新运行 bootstrap 覆盖配置
+3. 微信个人号重新执行 `cc-connect weixin setup` 或 `home-agent-bootstrap setup-weixin N`
+4. 检查审计日志：`tail -n 100 ~/.cc-connect/audit/events.log`
+5. 恢复服务：`home-agent-bootstrap start`

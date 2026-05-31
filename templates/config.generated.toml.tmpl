@@ -55,7 +55,7 @@ rate_limit = { max_messages = 50, window_secs = 60 }
 
 [projects.users.roles.member]
 user_ids = ["*"]
-disabled_commands = ["shell", "show", "dir", "restart", "upgrade", "commands"]
+disabled_commands = {{ array .MemberDisabledCommands }}
 rate_limit = { max_messages = 10, window_secs = 60 }
 
 [projects.agent]
