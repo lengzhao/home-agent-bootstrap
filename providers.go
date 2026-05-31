@@ -49,13 +49,8 @@ func providerPresetByName(name string) (ProviderPreset, bool) {
 	return ProviderPreset{}, false
 }
 
-func configureClaudeCodeShellFromPreset(p *prompt, preset ProviderPreset) error {
-	_, err := configureClaudeCodeProviderFromPreset(p, preset)
-	return err
-}
-
 func configureClaudeCodeProviderFromPreset(p *prompt, preset ProviderPreset) (ProviderConfig, error) {
-	keyLabel := fmt.Sprintf("请输入 %s API Key，将写入 config.toml，并同步写入 ~/.zshrc 供直接运行 claude 使用", preset.DisplayName)
+	keyLabel := fmt.Sprintf("请输入 %s API Key，将写入 config.toml，并同步写入 shell 配置文件供直接运行 claude 使用", preset.DisplayName)
 	key := p.askSecret(keyLabel)
 	if key == "" {
 		warn("API Key 为空，跳过 Provider 和环境变量配置")

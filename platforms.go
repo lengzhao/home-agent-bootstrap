@@ -34,6 +34,7 @@ type PlatformPreset struct {
 	DisplayName   string
 	Connection    string
 	NeedsPublicIP bool
+	PublicIPLabel string
 	DocHint       string
 	SetupCLI      string
 	Fields        []PlatformField
@@ -82,7 +83,7 @@ var platformPresets = []PlatformPreset{
 		},
 	},
 	{
-		Type: "wecom", DisplayName: "企业微信", Connection: "WebSocket / Webhook", NeedsPublicIP: true, DocHint: "cc-connect docs/wecom.md",
+		Type: "wecom", DisplayName: "企业微信", Connection: "WebSocket / Webhook", PublicIPLabel: "视模式", DocHint: "cc-connect docs/wecom.md",
 		Fields: []PlatformField{
 			{Key: "corp_id", Label: "企业微信 corp_id", Required: true},
 			{Key: "corp_secret", Label: "企业微信 corp_secret", Secret: true, Required: true},
@@ -144,13 +145,20 @@ func platformPresetByType(typ string) (PlatformPreset, bool) {
 func printPlatformCatalog(out io.Writer) {
 	fmt.Fprintln(out, "\n可选接入平台（与 cc-connect 支持列表对齐）：")
 	for i, preset := range platformPresets {
-		publicIP := "否"
-		if preset.NeedsPublicIP {
-			publicIP = "是"
-		}
+		publicIP := presetPublicIPLabel(preset)
 		fmt.Fprintf(out, "  %2d) %-10s %s (%s，公网 %s)\n", i+1, preset.Type, preset.DisplayName, preset.Connection, publicIP)
 	}
 	fmt.Fprintln(out, "\n输入序号，多个用逗号分隔，例如 7 或 1,7。默认 7 为微信个人号。")
+}
+
+func presetPublicIPLabel(preset PlatformPreset) string {
+	if preset.PublicIPLabel != "" {
+		return preset.PublicIPLabel
+	}
+	if preset.NeedsPublicIP {
+		return "是"
+	}
+	return "否"
 }
 
 func parsePlatformChoices(raw string) ([]PlatformPreset, error) {

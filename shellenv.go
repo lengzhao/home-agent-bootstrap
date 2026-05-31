@@ -19,8 +19,15 @@ type ClaudeCodeShellProfile struct {
 	Vars  map[string]string
 }
 
-func zshrcPath() string {
-	return filepath.Join(homeDir(), ".zshrc")
+func shellProfilePath() string {
+	switch filepath.Base(os.Getenv("SHELL")) {
+	case "bash":
+		return filepath.Join(homeDir(), ".bashrc")
+	case "zsh", "":
+		return filepath.Join(homeDir(), ".zshrc")
+	default:
+		return filepath.Join(homeDir(), ".zshrc")
+	}
 }
 
 func shellQuote(value string) string {
@@ -51,7 +58,7 @@ func buildClaudeCodeExportBlock(profile ClaudeCodeShellProfile) string {
 }
 
 func upsertClaudeCodeShellEnv(profile ClaudeCodeShellProfile) (string, error) {
-	path := zshrcPath()
+	path := shellProfilePath()
 	existing, err := os.ReadFile(path)
 	content := ""
 	if err == nil {
@@ -90,9 +97,9 @@ func replaceMarkedBlock(content, block string) string {
 
 func claudeCodeEnvWithModel(apiKey, baseURL, model string, extras map[string]string) map[string]string {
 	vars := map[string]string{
-		"ANTHROPIC_BASE_URL":  baseURL,
+		"ANTHROPIC_BASE_URL":   baseURL,
 		"ANTHROPIC_AUTH_TOKEN": apiKey,
-		"ANTHROPIC_MODEL":     model,
+		"ANTHROPIC_MODEL":      model,
 	}
 	for key, value := range extras {
 		vars[key] = value
@@ -182,7 +189,7 @@ func configureClaudeCodeShellEnv(p *prompt, profile ClaudeCodeShellProfile, docU
 		return fmt.Errorf("写入 %s 失败: %w", path, err)
 	}
 	say("已写入 Claude Code 环境变量到 " + path)
-	fmt.Fprintln(p.out, "请执行 source ~/.zshrc 或重新打开终端，再运行 claude。")
+	fmt.Fprintf(p.out, "请执行 source %s 或重新打开终端，再运行 claude。\n", path)
 	fmt.Fprintln(p.out, "在 Claude Code 中可用 /status 确认模型。")
 	if docURL != "" {
 		fmt.Fprintf(p.out, "参考 %s\n", docURL)

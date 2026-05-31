@@ -104,14 +104,14 @@ func TestClaudeWorkspaceInitCommandUsesWorkspace(t *testing.T) {
 	}
 }
 
-func TestWeixinFirstMessageInstructionMentionsLogin(t *testing.T) {
+func TestWeixinFirstMessageInstructionDoesNotMentionClaudeLogin(t *testing.T) {
 	got := weixinFirstMessageInstruction()
 
-	if !strings.Contains(got, "/login") {
-		t.Fatalf("first message instruction should mention /login:\n%s", got)
+	if strings.Contains(got, "/login") {
+		t.Fatalf("weixin first message instruction should not confuse Claude Code /login with weixin binding:\n%s", got)
 	}
-	if !strings.Contains(got, "context_token") {
-		t.Fatalf("first message instruction should mention context_token:\n%s", got)
+	if !strings.Contains(got, "/whoami") {
+		t.Fatalf("first message instruction should mention /whoami:\n%s", got)
 	}
 }
 
@@ -133,15 +133,20 @@ func TestRenderConfigIncludesProviderWhenAPIKeyProvided(t *testing.T) {
 	got := renderConfig(cfg)
 
 	for _, want := range []string{
-		`[[providers]]`,
+		`[[projects.agent.providers]]`,
 		`name = "anthropic"`,
 		`api_key = "sk-test"`,
 		`provider = "anthropic"`,
-		`provider_refs = ["anthropic"]`,
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("config missing %q:\n%s", want, got)
 		}
+	}
+	if strings.Contains(got, `[[providers]]`) {
+		t.Fatalf("provider should be nested under projects.agent, not top-level:\n%s", got)
+	}
+	if strings.Contains(got, `provider_refs`) {
+		t.Fatalf("provider_refs should not be rendered for cc-connect project providers:\n%s", got)
 	}
 }
 
@@ -233,16 +238,19 @@ func TestRenderConfigIncludesOpenAICompatibleProviderOptions(t *testing.T) {
 	got := renderConfig(cfg)
 
 	for _, want := range []string{
+		`[[projects.agent.providers]]`,
 		`name = "openai"`,
 		`api_key = "sk-openai"`,
 		`base_url = "https://api.openai.com/v1"`,
 		`model = "gpt-4.1"`,
 		`provider = "openai"`,
-		`provider_refs = ["openai"]`,
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("config missing %q:\n%s", want, got)
 		}
+	}
+	if strings.Contains(got, `provider_refs`) {
+		t.Fatalf("provider_refs should not be rendered for cc-connect project providers:\n%s", got)
 	}
 }
 
@@ -402,6 +410,9 @@ func TestWriteWorkspaceFilesIncludesDefaultSkills(t *testing.T) {
 		"CLAUDE.md",
 		"HOME.md",
 		"HEARTBEAT.md",
+		"members.md",
+		"devices.md",
+		"tasks.md",
 		"skills/cc-connect/SKILL.md",
 		"skills/skill-creator/SKILL.md",
 		"skills/skill-maintenance/SKILL.md",

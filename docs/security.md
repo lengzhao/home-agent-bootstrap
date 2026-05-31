@@ -4,19 +4,23 @@
 
 ## 权限模式
 
-Claude Code 推荐：
+Claude Code bootstrap 默认：
+
+```toml
+[projects.agent.options]
+mode = "auto"
+```
+
+若希望每次工具调用都更严格确认，可改为 `default`。
+
+Cursor Agent bootstrap 默认：
 
 ```toml
 [projects.agent.options]
 mode = "default"
 ```
 
-Cursor Agent 推荐：
-
-```toml
-[projects.agent.options]
-mode = "ask"
-```
+若希望只读问答，可改为 `ask`。
 
 不建议家庭场景默认使用：
 

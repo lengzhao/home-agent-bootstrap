@@ -64,6 +64,17 @@ func TestPlatformSetupHintsSkipsWeixinWhenListed(t *testing.T) {
 	}
 }
 
+func TestPrintPlatformCatalogShowsWecomPublicIPDependsOnMode(t *testing.T) {
+	var out strings.Builder
+
+	printPlatformCatalog(&out)
+
+	got := out.String()
+	if !strings.Contains(got, "wecom      企业微信 (WebSocket / Webhook，公网 视模式)") {
+		t.Fatalf("wecom should show public IP as mode-dependent:\n%s", got)
+	}
+}
+
 func testWeixinPlatform(accountID, allowFrom string) PlatformBlock {
 	return PlatformBlock{
 		Type: "weixin",

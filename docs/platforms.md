@@ -36,6 +36,8 @@ cc-connect feishu setup --config ~/.cc-connect/config.toml --project home
 cc-connect dingtalk setup --config ~/.cc-connect/config.toml --project home
 ```
 
+其中企业微信是否需要公网 URL 取决于实际接入模式，bootstrap 只在平台列表里标注“视模式”，具体以 cc-connect 上游文档为准。
+
 各平台完整配置说明请参考 cc-connect 上游文档（`docs/feishu.md`、`docs/telegram.md` 等）。
 
 ## 管理员 ID

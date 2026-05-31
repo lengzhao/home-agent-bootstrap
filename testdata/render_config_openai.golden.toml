@@ -1,5 +1,5 @@
 language = "zh"
-data_dir = {{ quote .DataDir }}
+data_dir = "/Users/me/.cc-connect"
 attachment_send = "on"
 
 [log]
@@ -15,43 +15,35 @@ tool_max_len = 500
 [management]
 enabled = true
 port = 9820
-token = {{ quote .ManagementToken }}
+token = "mgmt-token"
 cors_origins = ["http://localhost:9820", "http://127.0.0.1:9820"]
 
 [bridge]
 enabled = true
 port = 9810
-token = {{ quote .BridgeToken }}
+token = "bridge-token"
 path = "/bridge/ws"
 
 [webhook]
 enabled = true
 port = 9111
-token = {{ quote .WebhookToken }}
+token = "hook-token"
 path = "/hook"
 
 [[hooks]]
 event = "*"
 type = "command"
-command = {{ quote .AuditCommand }}
+command = "mkdir -p /Users/me/.cc-connect/audit && echo \"$(date '+%Y-%m-%dT%H:%M:%S%z') $CC_HOOK_EVENT $CC_HOOK_USER_ID $CC_HOOK_USER_NAME\" >> /Users/me/.cc-connect/audit/events.log"
 async = true
 timeout = 5
 
 [[projects]]
-name = {{ quote .ProjectName }}
+name = "home"
 reset_on_idle_mins = 0
-admin_from = {{ quote .AdminFrom }}
+admin_from = ""
 
 [projects.users]
 default_role = "member"
-
-{{- if .AdminUserIDs }}
-
-[projects.users.roles.admin]
-user_ids = {{ array .AdminUserIDs }}
-disabled_commands = []
-rate_limit = { max_messages = 50, window_secs = 60 }
-{{- end }}
 
 [projects.users.roles.member]
 user_ids = ["*"]
@@ -59,30 +51,18 @@ disabled_commands = ["shell", "show", "dir", "restart", "upgrade", "commands"]
 rate_limit = { max_messages = 10, window_secs = 60 }
 
 [projects.agent]
-type = {{ quote .AgentType }}
+type = "claudecode"
 
 [projects.agent.options]
-work_dir = {{ quote .Workspace }}
-mode = {{ quote .AgentMode }}
-{{- if and .ProviderName (eq .AgentType "claudecode") }}
-provider = {{ quote .ProviderName }}
-{{- end }}
-{{- if eq .AgentType "cursor" }}
-cmd = "agent"
-{{- end }}
-
-{{- if and .ProviderName (eq .AgentType "claudecode") }}
+work_dir = "/Users/me/home-assistant-workspace"
+mode = "auto"
+provider = "openai"
 
 [[projects.agent.providers]]
-name = {{ quote .ProviderName }}
-api_key = {{ quote .ProviderAPIKey }}
-{{- if .ProviderBaseURL }}
-base_url = {{ quote .ProviderBaseURL }}
-{{- end }}
-{{- if .ProviderModel }}
-model = {{ quote .ProviderModel }}
-{{- end }}
-{{- end }}
+name = "openai"
+api_key = "sk-openai"
+base_url = "https://api.openai.com/v1"
+model = "gpt-4.1"
 
 # Heartbeat 需要知道目标会话 session_key。
 # 启动并完成首次微信对话后，可通过 /status 或日志确认 session_key，再取消注释。
@@ -95,13 +75,15 @@ model = {{ quote .ProviderModel }}
 # silent = true
 # timeout_mins = 10
 # prompt = "读取 HEARTBEAT.md，检查今天家庭提醒、待办、异常事项，只在需要时提醒。"
-{{ range .Platforms }}
+
 
 [[projects.platforms]]
-type = {{ quote .Type }}
+type = "weixin"
 
 [projects.platforms.options]
-{{- range .Options }}
-{{ .Key }} = {{ if eq .Key "long_poll_timeout_ms" }}{{ .Value }}{{ else }}{{ quote .Value }}{{ end }}
-{{- end }}
-{{- end }}
+token = ""
+base_url = "https://ilinkai.weixin.qq.com"
+cdn_base_url = "https://novac2c.cdn.weixin.qq.com/c2c"
+allow_from = ""
+account_id = "wx-main"
+long_poll_timeout_ms = 35000

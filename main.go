@@ -65,6 +65,8 @@ func run(args []string) error {
 		return runBootstrap()
 	case "doctor":
 		return runDoctor()
+	case "migrate-config":
+		return runMigrateConfig()
 	case "setup-weixin":
 		return runSetupWeixin(args)
 	case "start":
@@ -83,6 +85,7 @@ func printUsage() {
 用法:
   %s bootstrap       全新 Mac 引导安装和生成配置，默认命令
   %s doctor          检查本机依赖和 cc-connect 状态
+  %s migrate-config  将旧版 [[providers]] 迁移到 [[projects.agent.providers]]
   %s setup-weixin N  按平台顺序扫码绑定 N 个微信个人号
   %s start           安装并启动 cc-connect daemon
 
@@ -90,7 +93,7 @@ func printUsage() {
   CONFIG_PATH        cc-connect 配置路径，默认 ~/.cc-connect/config.toml
   PROJECT_NAME       cc-connect project 名称，默认 home
   INSTALL_DEPS=0     跳过 Homebrew、Node、ffmpeg 等系统依赖安装
-`, appName, appName, appName, appName, appName)
+`, appName, appName, appName, appName, appName, appName)
 }
 
 func runBootstrap() error {
@@ -121,13 +124,13 @@ func runBootstrap() error {
 	agentChoice := p.askAllowed("请选择", "1", []string{"1", "2"})
 
 	agentType := "claudecode"
-	agentMode := "default"
+	agentMode := "auto"
 	if agentChoice == "2" {
 		agentType = "cursor"
-		agentMode = p.askAllowed("Cursor Agent 默认权限模式", "ask", []string{"ask", "plan", "default", "force"})
+		agentMode = p.askAllowed("Cursor Agent 默认权限模式", "default", []string{"ask", "plan", "default", "force"})
 	} else {
 		printClaudeCodeModeHelp()
-		agentMode = p.askAllowed("Claude Code 默认权限模式", "default", []string{"default", "plan", "auto", "acceptEdits"})
+		agentMode = p.askAllowed("Claude Code 默认权限模式", "auto", []string{"default", "plan", "auto", "acceptEdits"})
 	}
 	if err := validateAgentMode(agentType, agentMode); err != nil {
 		return err
@@ -257,9 +260,9 @@ func validateAgentMode(agentType, mode string) error {
 
 func printClaudeCodeModeHelp() {
 	fmt.Fprintln(os.Stdout, "Claude Code 权限模式说明：")
-	fmt.Fprintln(os.Stdout, "- default：推荐。执行工具前按 Claude Code 默认策略询问。")
+	fmt.Fprintln(os.Stdout, "- auto：推荐。自动执行低风险操作，适合可信本机家庭助手。")
+	fmt.Fprintln(os.Stdout, "- default：执行工具前按 Claude Code 默认策略询问。")
 	fmt.Fprintln(os.Stdout, "- plan：只读规划，不执行修改。")
-	fmt.Fprintln(os.Stdout, "- auto：自动执行低风险操作，适合可信本机环境。")
 	fmt.Fprintln(os.Stdout, "- acceptEdits：自动接受编辑，风险更高，首次部署不建议。")
 }
 
@@ -359,12 +362,12 @@ func configureLLM(p *prompt, agentType string) ProviderConfig {
 	fmt.Fprintln(os.Stdout, "选择 Claude Code 的 LLM 配置方式：")
 	fmt.Fprintln(os.Stdout, "1) 使用 Claude Code 自带登录，现在启动 claude 完成登录/授权")
 	fmt.Fprintln(os.Stdout, "2) Anthropic API Key")
-	fmt.Fprintln(os.Stdout, "3) OpenAI（写入 config.toml Provider，并同步 ~/.zshrc）")
-	fmt.Fprintln(os.Stdout, "4) OpenRouter（写入 config.toml Provider，并同步 ~/.zshrc）")
-	fmt.Fprintln(os.Stdout, "5) Kimi (Moonshot)（写入 config.toml Provider，并同步 ~/.zshrc）")
-	fmt.Fprintln(os.Stdout, "6) 火山引擎 (豆包)（写入 config.toml Provider，并同步 ~/.zshrc）")
-	fmt.Fprintln(os.Stdout, "7) 通义千问 (DashScope)（写入 config.toml Provider，并同步 ~/.zshrc）")
-	fmt.Fprintln(os.Stdout, "8) 自定义 OpenAI-compatible（写入 config.toml Provider，并同步 ~/.zshrc）")
+	fmt.Fprintln(os.Stdout, "3) OpenAI（写入 config.toml Provider，并同步 shell 配置文件）")
+	fmt.Fprintln(os.Stdout, "4) OpenRouter（写入 config.toml Provider，并同步 shell 配置文件）")
+	fmt.Fprintln(os.Stdout, "5) Kimi (Moonshot)（写入 config.toml Provider，并同步 shell 配置文件）")
+	fmt.Fprintln(os.Stdout, "6) 火山引擎 (豆包)（写入 config.toml Provider，并同步 shell 配置文件）")
+	fmt.Fprintln(os.Stdout, "7) 通义千问 (DashScope)（写入 config.toml Provider，并同步 shell 配置文件）")
+	fmt.Fprintln(os.Stdout, "8) 自定义 OpenAI-compatible（写入 config.toml Provider，并同步 shell 配置文件）")
 	fmt.Fprintln(os.Stdout, "9) 暂不配置")
 	choice := p.askAllowed("请选择", "1", []string{"1", "2", "3", "4", "5", "6", "7", "8", "9"})
 	switch choice {
@@ -417,7 +420,7 @@ func configureLLM(p *prompt, agentType string) ProviderConfig {
 			return provider
 		}
 	case "8":
-		key := p.askSecret("请输入 API Key，将写入 config.toml，并同步写入 ~/.zshrc")
+		key := p.askSecret("请输入 API Key，将写入 config.toml，并同步写入 shell 配置文件")
 		if key != "" {
 			baseURL := p.ask("ANTHROPIC_BASE_URL（OpenAI-compatible 接口地址）", "")
 			model := p.ask("模型 ID", "")
@@ -446,13 +449,23 @@ func runDoctor() error {
 	}
 
 	configPath := envDefault("CONFIG_PATH", filepath.Join(homeDir(), ".cc-connect", "config.toml"))
-	fmt.Println("\n== 配置检查 ==")
-	if exists(configPath) {
-		fmt.Printf("OK   config: %s\n", configPath)
-	} else {
-		fmt.Printf("MISS config: %s\n", configPath)
-	}
+
 	if commandExists("cc-connect") {
+		fmt.Println("\n== cc-connect 版本 ==")
+		if version := ccConnectVersion(); version != "" {
+			fmt.Printf("OK   %s\n", version)
+		} else {
+			fmt.Println("WARN 无法读取 cc-connect 版本")
+		}
+	}
+
+	if err := runConfigDoctor(configPath); err != nil {
+		return err
+	}
+
+	if commandExists("cc-connect") {
+		fmt.Println("\n== daemon 状态 ==")
+		_ = runCommand("cc-connect", "daemon", "status")
 		fmt.Println("\n== cc-connect doctor ==")
 		_ = runCommand("cc-connect", "doctor")
 	}
@@ -716,7 +729,7 @@ func printNextSteps(configPath, projectName string, platforms []PlatformBlock, a
 	fmt.Println("\n下一步：")
 	if agentType == "claudecode" {
 		fmt.Println("\n1. 确认 Claude Code 可登录：")
-		fmt.Println("   source ~/.zshrc   # 若使用第三方 LLM 环境变量")
+		fmt.Printf("   source %s   # 若使用第三方 LLM 环境变量\n", shellProfilePath())
 		fmt.Println("   claude")
 	} else {
 		fmt.Println("\n1. 确认 Cursor Agent 可用：")
@@ -756,7 +769,7 @@ func printNextSteps(configPath, projectName string, platforms []PlatformBlock, a
 }
 
 func weixinFirstMessageInstruction() string {
-	return "请用每个已绑定微信号先给机器人发送 /login，完成登录后再发普通消息或 /whoami，以便 cc-connect 缓存 context_token。"
+	return "请用每个已绑定微信号给机器人发送 /whoami 或一条普通消息，确认平台用户 ID 和消息链路正常。"
 }
 
 func addHomebrewToPath() {

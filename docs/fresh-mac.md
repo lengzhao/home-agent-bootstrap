@@ -50,13 +50,13 @@ INSTALL_DEPS=0 go run . bootstrap
 type = "claudecode"
 
 [projects.agent.options]
-mode = "default"
+mode = "auto"
 ```
 
 LLM 配置方式：
 
 - 使用 `claude` 交互式登录，适合个人订阅或 Claude Code 常规使用。
-- 官方 Anthropic API Key 写入 `config.toml`；其他第三方 LLM（OpenAI、OpenRouter、Kimi、火山、通义等）也会写入 `config.toml` Provider，并同步写入 `~/.zshrc` 方便直接运行 `claude`。
+- 官方 Anthropic API Key 写入 `config.toml`；其他第三方 LLM（OpenAI、OpenRouter、Kimi、火山、通义等）也会写入 `config.toml` Provider，并同步写入当前 shell 配置文件，方便直接运行 `claude`。
 - 使用自定义 OpenAI-compatible Provider。
 
 接入平台见 [接入平台选择](platforms.md)。
@@ -65,14 +65,14 @@ LLM 配置方式：
 
 ## Cursor Agent 配置建议
 
-Cursor Agent 可以作为运行时，但更推荐用于维护这个家庭助手项目。若选择 Cursor Agent，默认模式使用：
+Cursor Agent 可以作为运行时，但更推荐用于维护这个家庭助手项目。bootstrap 默认模式：
 
 ```toml
 [projects.agent.options]
-mode = "ask"
+mode = "default"
 ```
 
-不要在家庭场景默认使用 `force`。
+若希望更保守，可改为 `ask`。不要在家庭场景使用 `force`。
 
 ## 微信绑定
 
@@ -90,7 +90,7 @@ go run . setup-weixin 2
 
 其中 `2` 是微信个人号数量。扫码完成后，安装器会优先读取配置中第一个已回填的 `allow_from`，并写入 `projects.users.roles.admin.user_ids`。如果没有读取到，会提示手动输入管理员微信 ilink `user_id`；继续留空时会省略 admin role，避免生成 `user_ids = []` 的无效配置。
 
-扫码绑定后，请用每个已绑定微信号先给机器人发送 `/login`。完成登录后，再发送普通消息或 `/whoami`，cc-connect 才能缓存 `context_token` 并正常回复。
+扫码绑定后，请用每个已绑定微信号给机器人发送 `/whoami` 或一条普通消息，确认平台用户 ID 和消息链路正常。
 
 ## 启动服务
 

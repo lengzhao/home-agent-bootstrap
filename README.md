@@ -11,6 +11,16 @@
 
 ## 快速开始
 
+Release 安装（推荐）：
+
+```bash
+# 以 v0.1.0 为例，按你的 CPU 选择 darwin-arm64 / darwin-amd64 / linux-amd64
+curl -L -o home-agent-bootstrap \
+  https://github.com/lengzhao/home-agent-bootstrap/releases/download/v0.1.0/home-agent-bootstrap-darwin-arm64
+chmod +x home-agent-bootstrap
+./home-agent-bootstrap bootstrap
+```
+
 开发模式：
 
 ```bash
@@ -45,7 +55,7 @@ INSTALL_DEPS=0 go run . bootstrap
 9. 若包含微信，默认逐个扫码绑定并自动回填管理员角色。
 10. 输出 daemon 启动命令和管理后台地址。
 
-微信扫码绑定后，需要先在每个已绑定微信号里给机器人发送 `/login`，再发送普通消息或 `/whoami`。
+微信扫码绑定后，可在每个已绑定微信号里发送 `/whoami` 或一条普通消息，确认平台用户 ID 和消息链路正常。
 
 ## 推荐架构
 
@@ -78,6 +88,14 @@ go run . start
 
 ```bash
 go run . doctor
+./home-agent-bootstrap doctor
+```
+
+如果使用了旧版顶层 `[[providers]]` 配置，可先迁移：
+
+```bash
+./home-agent-bootstrap migrate-config
+./home-agent-bootstrap doctor
 ```
 
 查看日志：
@@ -90,14 +108,27 @@ cc-connect daemon logs -f
 
 ```text
 main.go
+configcheck.go
 main_test.go
+configcheck_test.go
+providers.go
+platforms.go
+shellenv.go
 go.mod
+.github/workflows/
+  ci.yml
+  release.yml
 templates/
   config.generated.toml.tmpl
+testdata/
+  render_config_openai.golden.toml
 workspace/
   HOME.md
   HEARTBEAT.md
   CLAUDE.md
+  members.md
+  devices.md
+  tasks.md
 docs/
   fresh-mac.md
   configuration.md
@@ -116,6 +147,13 @@ docs/
 - 微信 ilink token
 - Management、Bridge、Webhook token
 - Claude/Cursor 登录凭据
+
+## CI 和发布
+
+仓库包含 GitHub Actions：
+
+- `CI`：在 push 和 pull request 时运行 `go test ./...`。
+- `Release`：推送 `v*` tag 时构建 Darwin/Linux 二进制并上传 SHA256 校验文件。
 
 ## 参考文档
 

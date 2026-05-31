@@ -61,7 +61,7 @@ cc-connect weixin setup --config ~/.cc-connect/config.toml --project home --plat
 cc-connect weixin bind --config ~/.cc-connect/config.toml --project home --platform-index 1 --token '<token>'
 ```
 
-多微信号按配置顺序选择 `--platform-index`。绑定后提醒用户先给机器人发一条消息，以便缓存 `context_token`。生产环境不要长期使用空白或通配的 `allow_from`，建议绑定后通过 `/whoami` 获取 user id 并改成白名单。
+多微信号按配置顺序选择 `--platform-index`。绑定后提醒用户发送 `/whoami` 或一条普通消息，确认平台用户 ID 和消息链路正常。生产环境不要长期使用空白或通配的 `allow_from`，建议绑定后通过 `/whoami` 获取 user id 并改成白名单。若回复里出现 `Not logged in. Please run /login`，优先检查 Claude Code 登录态或自定义 LLM Provider 配置，不要把它当成微信绑定步骤。
 
 ## Daemon 和诊断
 

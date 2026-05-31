@@ -38,3 +38,25 @@ func TestReplaceMarkedBlockUpdatesExisting(t *testing.T) {
 		t.Fatalf("expected single marker block:\n%s", got)
 	}
 }
+
+func TestShellProfilePathUsesBashrcForBash(t *testing.T) {
+	t.Setenv("HOME", "/Users/me")
+	t.Setenv("SHELL", "/bin/bash")
+
+	got := shellProfilePath()
+
+	if got != "/Users/me/.bashrc" {
+		t.Fatalf("shellProfilePath() = %q, want /Users/me/.bashrc", got)
+	}
+}
+
+func TestShellProfilePathDefaultsToZshrc(t *testing.T) {
+	t.Setenv("HOME", "/Users/me")
+	t.Setenv("SHELL", "")
+
+	got := shellProfilePath()
+
+	if got != "/Users/me/.zshrc" {
+		t.Fatalf("shellProfilePath() = %q, want /Users/me/.zshrc", got)
+	}
+}

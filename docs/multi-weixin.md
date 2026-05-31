@@ -92,10 +92,12 @@ cc-connect weixin bind --config ~/.cc-connect/config.toml --project home --platf
 
 ## 首次对话
 
-每个微信号扫码成功后，都需要先给机器人发送：
+每个微信号扫码成功后，建议先给机器人发送：
 
 ```text
-/login
+/whoami
 ```
 
-完成登录后，再发送普通消息或 `/whoami`。这样 cc-connect 才能缓存 `context_token` 并正常回复。若普通消息返回 `Not logged in . Please run /login`，说明还没有完成这一步。
+或者发送一条普通消息，确认平台用户 ID 和消息链路正常。
+
+如果回复里出现 `Not logged in. Please run /login`，这通常是 Claude Code 运行时没有拿到登录态或自定义 LLM 环境变量，不是微信个人号绑定步骤。请优先检查 `config.toml` 里的 `[projects.agent.options] provider` 和 `[[projects.agent.providers]]` 是否正确生成，并重装或重启 daemon。

@@ -10,14 +10,13 @@ type = "claudecode"
 
 [projects.agent.options]
 work_dir = "/Users/you/home-assistant-workspace"
-mode = "default"
-model = "sonnet"
+mode = "auto"
 ```
 
 原因：
 
 - cc-connect 对 Claude Code 的权限审批、Cron、会话和隔离支持更完整。
-- 家庭助手需要明确的人类确认流程，`default` 模式更安全。
+- bootstrap 默认使用 `auto`，在可信本机环境下减少反复确认；更保守时可改为 `default`。
 - 后续接 MCP、脚本、日历、家庭知识库时，Claude Code 的工具生态更成熟。
 
 如果选择 `Cursor Agent`：
@@ -28,15 +27,15 @@ type = "cursor"
 
 [projects.agent.options]
 work_dir = "/Users/you/home-assistant-workspace"
-mode = "ask"
+mode = "default"
 cmd = "agent"
 ```
 
 建议模式：
 
-- `ask`：只读问答，最安全。
+- `default`：bootstrap 默认。可执行工具，但会按 Cursor Agent 策略询问。
+- `ask`：只读问答，更保守。
 - `plan`：只读规划，不执行。
-- `default`：可执行但会询问。
 - `force`：自动批准所有工具调用，不建议用于家庭场景。
 
 ## 管理后台
@@ -107,25 +106,23 @@ Claude Code 运行时（`claudecode`）分两类配置方式：
 
 ### 官方方式（写入 config.toml）
 
-1. **Claude Code 自带登录**：不写 `[[providers]]`，在家庭助手工作目录运行 `claude` 完成授权。
-2. **Anthropic API Key**：写入 `[[providers]]` 并在 agent 中引用。
+1. **Claude Code 自带登录**：不写 Provider，在家庭助手工作目录运行 `claude` 完成授权。
+2. **Anthropic API Key**：写入 `[[projects.agent.providers]]` 并在 agent 中引用。
 
 ```toml
-[[providers]]
-name = "anthropic"
-api_key = "sk-ant-..."
-agent_types = ["claudecode"]
-
 [projects.agent.options]
 provider = "anthropic"
-provider_refs = ["anthropic"]
+
+[[projects.agent.providers]]
+name = "anthropic"
+api_key = "sk-ant-..."
 ```
 
-### 第三方 LLM（写入 config.toml，并同步 ~/.zshrc）
+### 第三方 LLM（写入 config.toml，并同步 shell 配置文件）
 
-OpenAI、OpenRouter、Kimi、火山、通义及自定义 OpenAI-compatible 会写入 `config.toml` 的 `[[providers]]`，并在 `[projects.agent.options]` 中引用该 provider。这样 `cc-connect daemon` 由 launchd 拉起时也能读取凭证，不依赖交互式 shell 的 `~/.zshrc`。
+OpenAI、OpenRouter、Kimi、火山、通义及自定义 OpenAI-compatible 会写入 `config.toml` 的 `[[projects.agent.providers]]`，并在 `[projects.agent.options]` 中引用该 provider。cc-connect 启动 Claude Code 子进程时会按 Provider 配置注入环境变量；`daemon install` 本身没有单独的 env 参数，所以不要依赖交互式 shell 配置给 daemon 传密钥。
 
-同时，bootstrap 会同步写入 `~/.zshrc` 中带标记的 `ANTHROPIC_*` 环境变量块，方便你在终端里直接运行 `claude` 调试。
+同时，bootstrap 会同步写入当前 shell 的配置文件中带标记的 `ANTHROPIC_*` 环境变量块，方便你在终端里直接运行 `claude` 调试。zsh 使用 `~/.zshrc`，bash 使用 `~/.bashrc`，其他 shell 默认写入 `~/.zshrc`。
 
 bootstrap 选项 3–8 会生成类似：
 
@@ -140,11 +137,43 @@ export ANTHROPIC_MODEL='kimi-k2.5'
 配置完成后执行：
 
 ```bash
-source ~/.zshrc
+source ~/.zshrc  # bash 用户使用 source ~/.bashrc
 claude
 ```
 
 在 Claude Code 内用 `/status` 确认模型。Kimi 详见 [官方 Claude Code 接入说明](https://platform.kimi.com/docs/guide/agent-support)。
+
+如果聊天里返回 `Not logged in. Please run /login`，优先检查生成的配置是否包含：
+
+```toml
+[projects.agent.options]
+provider = "kimi"
+
+[[projects.agent.providers]]
+name = "kimi"
+api_key = "..."
+base_url = "https://api.moonshot.cn/anthropic"
+model = "kimi-k2.5"
+```
+
+修改配置后重新执行 `home-agent-bootstrap start` 或 `cc-connect daemon install --config ~/.cc-connect/config.toml --force && cc-connect daemon restart`。
+
+## 排障与迁移
+
+检查依赖、配置结构、Provider 引用、cc-connect 版本和 daemon 状态：
+
+```bash
+home-agent-bootstrap doctor
+```
+
+如果配置文件仍是旧版顶层 `[[providers]]` 或包含 `provider_refs`，可自动迁移到 `[[projects.agent.providers]]`：
+
+```bash
+home-agent-bootstrap migrate-config
+home-agent-bootstrap doctor
+```
+
+迁移前会自动备份现有配置文件。
 
 | 预设 | 默认 ANTHROPIC_BASE_URL | 默认模型 |
 |------|-------------------------|----------|
@@ -154,7 +183,7 @@ claude
 | 火山 | https://ark.cn-beijing.volces.com/api/v3 | 安装时指定 |
 | 通义 | https://dashscope.aliyuncs.com/compatible-mode/v1 | qwen-plus |
 
-不要把 `~/.cc-connect/config.toml` 或含 API Key 的 `~/.zshrc` 片段提交到 GitHub。
+不要把 `~/.cc-connect/config.toml` 或含 API Key 的 shell 配置片段提交到 GitHub。
 
 ## 会话和显示默认值
 
@@ -188,4 +217,19 @@ cc-connect daemon logs -f
 
 ```bash
 cc-connect daemon restart
+```
+
+## Heartbeat
+
+生成的配置里会包含注释状态的 Heartbeat 示例。完成首次对话后，可通过 `/status` 或日志确认目标会话的 `session_key`，再取消注释：
+
+```toml
+[projects.heartbeat]
+enabled = true
+interval_mins = 60
+session_key = "weixin:REPLACE_WITH_SESSION_KEY"
+only_when_idle = true
+silent = true
+timeout_mins = 10
+prompt = "读取 HEARTBEAT.md，检查今天家庭提醒、待办、异常事项，只在需要时提醒。"
 ```
