@@ -1,4 +1,4 @@
-package main
+package bootstrap
 
 import (
 	"bytes"
@@ -6,9 +6,12 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/lengzhao/home-agent-bootstrap/cmdutil"
+	"github.com/lengzhao/home-agent-bootstrap/prompt"
 )
 
-func TestDefaultBootstrapSettings(t *testing.T) {
+func TestDefaultSettings(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("CONFIG_PATH", "")
@@ -20,7 +23,7 @@ func TestDefaultBootstrapSettings(t *testing.T) {
 	t.Setenv("PLATFORM_CHOICES", "")
 	t.Setenv("LLM_CHOICE", "")
 
-	got := defaultBootstrapSettings()
+	got := DefaultSettings()
 
 	if got.ConfigPath != filepath.Join(home, ".cc-connect", "config.toml") {
 		t.Fatalf("ConfigPath = %q", got.ConfigPath)
@@ -52,7 +55,7 @@ func TestPrintUsageDocumentsEnvAndDefaults(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 
 	var buf bytes.Buffer
-	printUsage(&buf)
+	PrintUsage(&buf)
 	out := buf.String()
 
 	for _, want := range []string{
@@ -71,13 +74,13 @@ func TestPrintUsageDocumentsEnvAndDefaults(t *testing.T) {
 	}
 }
 
-func TestLoadBootstrapSettingsNonInteractive(t *testing.T) {
+func TestLoadSettingsNonInteractive(t *testing.T) {
 	t.Setenv("NONINTERACTIVE", "1")
 	t.Setenv("AGENT_TYPE", "claudecode")
 	t.Setenv("PERMISSION_TEMPLATE", "family-readonly")
 	t.Setenv("PLATFORM_CHOICES", "7")
 
-	got := loadBootstrapSettings(&prompt{out: os.Stdout})
+	got := loadSettings(prompt.New(nil, os.Stdout, true))
 
 	if got.AgentMode != "auto" {
 		t.Fatalf("AgentMode = %q, want auto", got.AgentMode)
@@ -90,9 +93,21 @@ func TestLoadBootstrapSettingsNonInteractive(t *testing.T) {
 	}
 }
 
-func TestPermissionTemplateChoiceDefaultFromEnv(t *testing.T) {
-	t.Setenv("PERMISSION_TEMPLATE", "family-readonly")
-	if got := permissionTemplateChoiceDefault(); got != "2" {
-		t.Fatalf("permissionTemplateChoiceDefault() = %q, want 2", got)
+func TestWeixinFirstMessageInstructionDoesNotMentionClaudeLogin(t *testing.T) {
+	got := weixinFirstMessageInstruction()
+
+	if strings.Contains(got, "/login") {
+		t.Fatalf("weixin first message instruction should not confuse Claude Code /login with weixin binding:\n%s", got)
+	}
+	if !strings.Contains(got, "/whoami") {
+		t.Fatalf("first message instruction should mention /whoami:\n%s", got)
+	}
+}
+
+func TestDefaultConfigPathUsesHome(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	if got := cmdutil.DefaultConfigPath(); got != filepath.Join(home, ".cc-connect", "config.toml") {
+		t.Fatalf("DefaultConfigPath() = %q", got)
 	}
 }

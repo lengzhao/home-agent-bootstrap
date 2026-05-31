@@ -292,3 +292,18 @@ NONINTERACTIVE=1 \
 ## 工作区模板同步
 
 bootstrap 会补全缺失的工作区文件，不会覆盖已有内容。工作区根目录的 `VERSION` 表示模板版本；若低于当前 bootstrap 版本，会提示有新模板可用。
+
+独立命令：
+
+```bash
+# 查看版本与缺失文件
+home-agent-bootstrap workspace-status
+
+# 补全缺失文件（不覆盖已有内容）
+home-agent-bootstrap sync-workspace
+
+# 预览将新增的文件
+home-agent-bootstrap sync-workspace --dry-run
+```
+
+可通过 `WORKSPACE` 指定工作目录，默认 `~/home-assistant-workspace`。

@@ -1,36 +1,38 @@
-package main
+package config
 
 import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/lengzhao/home-agent-bootstrap/cmdutil"
+	"github.com/lengzhao/home-agent-bootstrap/platforms"
 )
 
-type configFinding struct {
+type finding struct {
 	level   string
 	message string
 }
 
-func analyzeConfig(content string) []configFinding {
-	findings := make([]configFinding, 0)
+func Analyze(content string) []finding {
+	findings := make([]finding, 0)
 
 	if strings.TrimSpace(content) == "" {
-		findings = append(findings, configFinding{"MISS", "配置文件为空"})
+		findings = append(findings, finding{"MISS", "配置文件为空"})
 		return findings
 	}
 
 	if hasLegacyTopLevelProviders(content) {
-		findings = append(findings, configFinding{
+		findings = append(findings, finding{
 			"WARN",
 			"检测到旧版顶层 [[providers]]。daemon 下 Claude Code 应使用 [[projects.agent.providers]]。可运行 migrate-config 自动迁移",
 		})
 	}
 	if strings.Contains(content, "provider_refs") {
-		findings = append(findings, configFinding{
+		findings = append(findings, finding{
 			"WARN",
 			"检测到 provider_refs。当前 cc-connect 项目 Provider 只需在 [projects.agent.options] 设置 provider",
 		})
@@ -38,9 +40,9 @@ func analyzeConfig(content string) []configFinding {
 
 	agentType := configValue(content, `[projects.agent]`, "type")
 	if agentType == "" {
-		findings = append(findings, configFinding{"WARN", "未找到 [projects.agent] type"})
+		findings = append(findings, finding{"WARN", "未找到 [projects.agent] type"})
 	} else {
-		findings = append(findings, configFinding{"OK", "agent type = " + agentType})
+		findings = append(findings, finding{"OK", "agent type = " + agentType})
 	}
 
 	activeProvider := configValue(content, `[projects.agent.options]`, "provider")
@@ -48,17 +50,17 @@ func analyzeConfig(content string) []configFinding {
 
 	if agentType == "claudecode" && activeProvider != "" {
 		if len(projectProviders) == 0 {
-			findings = append(findings, configFinding{
+			findings = append(findings, finding{
 				"FAIL",
 				fmt.Sprintf("已设置 provider = %q，但未找到 [[projects.agent.providers]]", activeProvider),
 			})
 		} else if !containsString(projectProviders, activeProvider) {
-			findings = append(findings, configFinding{
+			findings = append(findings, finding{
 				"FAIL",
 				fmt.Sprintf("provider = %q 未在 [[projects.agent.providers]] 中定义，当前有 %s", activeProvider, strings.Join(projectProviders, ", ")),
 			})
 		} else {
-			findings = append(findings, configFinding{
+			findings = append(findings, finding{
 				"OK",
 				fmt.Sprintf("provider %q 已在 [[projects.agent.providers]] 中定义", activeProvider),
 			})
@@ -66,14 +68,14 @@ func analyzeConfig(content string) []configFinding {
 	}
 
 	if agentType == "claudecode" && activeProvider == "" && len(projectProviders) > 0 {
-		findings = append(findings, configFinding{
+		findings = append(findings, finding{
 			"WARN",
 			"已配置 [[projects.agent.providers]]，但 [projects.agent.options] 未设置 provider",
 		})
 	}
 
 	if !hasLegacyTopLevelProviders(content) && activeProvider == "" && len(projectProviders) == 0 && agentType == "claudecode" {
-		findings = append(findings, configFinding{
+		findings = append(findings, finding{
 			"OK",
 			"未配置第三方 Provider，Claude Code 将依赖交互式登录",
 		})
@@ -84,8 +86,7 @@ func analyzeConfig(content string) []configFinding {
 
 func hasLegacyTopLevelProviders(content string) bool {
 	for _, line := range strings.Split(content, "\n") {
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "[[providers]]" {
+		if strings.TrimSpace(line) == "[[providers]]" {
 			return true
 		}
 	}
@@ -153,13 +154,13 @@ func containsString(values []string, target string) bool {
 	return false
 }
 
-func printConfigFindings(findings []configFinding) {
-	for _, finding := range findings {
-		fmt.Printf("%-4s %s\n", finding.level, finding.message)
+func printFindings(findings []finding) {
+	for _, item := range findings {
+		fmt.Printf("%-4s %s\n", item.level, item.message)
 	}
 }
 
-func migrateLegacyConfig(content string) (string, bool, error) {
+func MigrateLegacy(content string) (string, bool, error) {
 	if !hasLegacyTopLevelProviders(content) && !strings.Contains(content, "provider_refs") {
 		return content, false, nil
 	}
@@ -311,9 +312,8 @@ func insertProjectAgentProviders(content string, blocks []legacyProviderBlock) (
 	return strings.Join(newLines, "\n"), nil
 }
 
-func runMigrateConfig() error {
-	configPath := envDefault("CONFIG_PATH", filepath.Join(homeDir(), ".cc-connect", "config.toml"))
-	if !exists(configPath) {
+func RunMigrate(configPath string) error {
+	if !cmdutil.Exists(configPath) {
 		return fmt.Errorf("配置文件不存在：%s", configPath)
 	}
 
@@ -322,31 +322,31 @@ func runMigrateConfig() error {
 		return err
 	}
 
-	updated, changed, err := migrateLegacyConfig(string(content))
+	updated, changed, err := MigrateLegacy(string(content))
 	if err != nil {
 		return err
 	}
 	if !changed {
-		say("未发现需要迁移的旧版 Provider 配置")
+		cmdutil.Say("未发现需要迁移的旧版 Provider 配置")
 		return nil
 	}
 
-	if err := backupFile(configPath); err != nil {
+	if err := cmdutil.BackupFile(configPath); err != nil {
 		return err
 	}
-	if err := writeFile(configPath, []byte(updated), 0o600); err != nil {
+	if err := cmdutil.WriteFile(configPath, []byte(updated), 0o600); err != nil {
 		return err
 	}
 
-	say("已将旧版 [[providers]] 迁移到 [[projects.agent.providers]]，并移除 provider_refs")
+	cmdutil.Say("已将旧版 [[providers]] 迁移到 [[projects.agent.providers]]，并移除 provider_refs")
 	fmt.Println("建议执行：")
-	fmt.Printf("  %s doctor\n", appName)
-	fmt.Printf("  %s start\n", appName)
+	fmt.Printf("  %s doctor\n", cmdutil.AppName)
+	fmt.Printf("  %s start\n", cmdutil.AppName)
 	return nil
 }
 
-func ccConnectVersion() string {
-	if !commandExists("cc-connect") {
+func CCConnectVersion() string {
+	if !cmdutil.CommandExists("cc-connect") {
 		return ""
 	}
 	out, err := exec.Command("cc-connect", "--version").CombinedOutput()
@@ -356,9 +356,9 @@ func ccConnectVersion() string {
 	return strings.TrimSpace(string(out))
 }
 
-func runConfigDoctor(configPath string) error {
+func RunConfigDoctor(configPath string) error {
 	fmt.Println("\n== 配置结构检查 ==")
-	if !exists(configPath) {
+	if !cmdutil.Exists(configPath) {
 		fmt.Printf("MISS config: %s\n", configPath)
 		return nil
 	}
@@ -369,14 +369,14 @@ func runConfigDoctor(configPath string) error {
 		return err
 	}
 
-	findings := analyzeConfig(string(content))
-	printConfigFindings(findings)
+	findings := Analyze(string(content))
+	printFindings(findings)
 
-	for _, finding := range findings {
-		if finding.level == "FAIL" {
+	for _, item := range findings {
+		if item.level == "FAIL" {
 			fmt.Println("\n修复建议：")
-			fmt.Printf("  %s migrate-config   # 若存在旧版 [[providers]]\n", appName)
-			fmt.Printf("  或重新运行 %s bootstrap 生成新配置\n", appName)
+			fmt.Printf("  %s migrate-config   # 若存在旧版 [[providers]]\n", cmdutil.AppName)
+			fmt.Printf("  或重新运行 %s bootstrap 生成新配置\n", cmdutil.AppName)
 			break
 		}
 	}
@@ -385,7 +385,7 @@ func runConfigDoctor(configPath string) error {
 
 var platformDocRowPattern = regexp.MustCompile(`^\|\s*(\d+)\s*\|\s*([a-z0-9_]+)\s*\|`)
 
-func platformTypesFromDocs(content string) ([]string, error) {
+func PlatformTypesFromDocs(content string) ([]string, error) {
 	types := make([]string, 0)
 	for _, line := range strings.Split(content, "\n") {
 		match := platformDocRowPattern.FindStringSubmatch(strings.TrimSpace(line))
@@ -400,10 +400,6 @@ func platformTypesFromDocs(content string) ([]string, error) {
 	return types, nil
 }
 
-func platformTypesFromPresets() []string {
-	types := make([]string, len(platformPresets))
-	for i, preset := range platformPresets {
-		types[i] = preset.Type
-	}
-	return types
+func PlatformTypesFromPresets() []string {
+	return platforms.TypesFromPresets()
 }

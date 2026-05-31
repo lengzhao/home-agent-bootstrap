@@ -1,16 +1,46 @@
-package main
+package config
 
 import (
-	"bufio"
-	"bytes"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/lengzhao/home-agent-bootstrap/permissions"
+	"github.com/lengzhao/home-agent-bootstrap/platforms"
 )
 
-func TestRenderConfigOmitsAdminRoleWhenUnknown(t *testing.T) {
-	cfg := RenderConfigInput{
+func testTemplates(t *testing.T) fs.FS {
+	t.Helper()
+	return os.DirFS(filepath.Join(".."))
+}
+
+func mustRender(t *testing.T, cfg RenderInput) string {
+	t.Helper()
+	got, err := Render(testTemplates(t), cfg)
+	if err != nil {
+		t.Fatalf("Render() error: %v", err)
+	}
+	return got
+}
+
+func testWeixinPlatform(accountID, allowFrom string) platforms.Block {
+	return platforms.Block{
+		Type: "weixin",
+		Options: []platforms.Option{
+			{Key: "token", Value: ""},
+			{Key: "base_url", Value: "https://ilinkai.weixin.qq.com"},
+			{Key: "cdn_base_url", Value: "https://novac2c.cdn.weixin.qq.com/c2c"},
+			{Key: "allow_from", Value: allowFrom},
+			{Key: "account_id", Value: accountID},
+			{Key: "long_poll_timeout_ms", Value: "35000"},
+		},
+	}
+}
+
+func TestRenderOmitsAdminRoleWhenUnknown(t *testing.T) {
+	cfg := RenderInput{
 		ConfigPath:      "/tmp/config.toml",
 		DataDir:         "/Users/me/.cc-connect",
 		Workspace:       "/Users/me/home-assistant-workspace",
@@ -20,13 +50,13 @@ func TestRenderConfigOmitsAdminRoleWhenUnknown(t *testing.T) {
 		ManagementToken: "mgmt",
 		BridgeToken:     "bridge",
 		WebhookToken:    "hook",
-		Platforms: []PlatformBlock{
+		Platforms: []platforms.Block{
 			testWeixinPlatform("wx-main", ""),
 			testWeixinPlatform("wx-family", "family@im.wechat"),
 		},
 	}
 
-	got := renderConfig(cfg)
+	got := mustRender(t, cfg)
 
 	if strings.Contains(got, "[projects.users.roles.admin]") {
 		t.Fatalf("config should omit admin role when admin_from is unknown:\n%s", got)
@@ -54,8 +84,8 @@ func TestRenderConfigOmitsAdminRoleWhenUnknown(t *testing.T) {
 	}
 }
 
-func TestRenderConfigIncludesAdminRoleWhenAdminKnown(t *testing.T) {
-	cfg := RenderConfigInput{
+func TestRenderIncludesAdminRoleWhenAdminKnown(t *testing.T) {
+	cfg := RenderInput{
 		DataDir:         "/Users/me/.cc-connect",
 		Workspace:       "/Users/me/home-assistant-workspace",
 		ProjectName:     "home",
@@ -65,10 +95,10 @@ func TestRenderConfigIncludesAdminRoleWhenAdminKnown(t *testing.T) {
 		BridgeToken:     "bridge",
 		WebhookToken:    "hook",
 		AdminFrom:       "admin@im.wechat",
-		Platforms:       []PlatformBlock{testWeixinPlatform("wx-main", "")},
+		Platforms:       []platforms.Block{testWeixinPlatform("wx-main", "")},
 	}
 
-	got := renderConfig(cfg)
+	got := mustRender(t, cfg)
 
 	for _, want := range []string{
 		`admin_from = "admin@im.wechat"`,
@@ -82,41 +112,16 @@ func TestRenderConfigIncludesAdminRoleWhenAdminKnown(t *testing.T) {
 }
 
 func TestDaemonInstallArgsUsesForce(t *testing.T) {
-	got := daemonInstallArgs("/tmp/config.toml")
+	got := DaemonInstallArgs("/tmp/config.toml")
 	want := []string{"daemon", "install", "--config", "/tmp/config.toml", "--force"}
 
 	if strings.Join(got, "\x00") != strings.Join(want, "\x00") {
-		t.Fatalf("daemonInstallArgs() = %#v, want %#v", got, want)
+		t.Fatalf("DaemonInstallArgs() = %#v, want %#v", got, want)
 	}
 }
 
-func TestClaudeWorkspaceInitCommandUsesWorkspace(t *testing.T) {
-	name, args, dir := claudeWorkspaceInitCommand("/Users/me/home-assistant-workspace")
-
-	if name != "claude" {
-		t.Fatalf("command name = %q, want claude", name)
-	}
-	if len(args) != 0 {
-		t.Fatalf("command args = %#v, want none", args)
-	}
-	if dir != "/Users/me/home-assistant-workspace" {
-		t.Fatalf("command dir = %q, want workspace", dir)
-	}
-}
-
-func TestWeixinFirstMessageInstructionDoesNotMentionClaudeLogin(t *testing.T) {
-	got := weixinFirstMessageInstruction()
-
-	if strings.Contains(got, "/login") {
-		t.Fatalf("weixin first message instruction should not confuse Claude Code /login with weixin binding:\n%s", got)
-	}
-	if !strings.Contains(got, "/whoami") {
-		t.Fatalf("first message instruction should mention /whoami:\n%s", got)
-	}
-}
-
-func TestRenderConfigIncludesProviderWhenAPIKeyProvided(t *testing.T) {
-	cfg := RenderConfigInput{
+func TestRenderIncludesProviderWhenAPIKeyProvided(t *testing.T) {
+	cfg := RenderInput{
 		DataDir:         "/Users/me/.cc-connect",
 		Workspace:       "/Users/me/home-assistant-workspace",
 		ProjectName:     "home",
@@ -127,10 +132,10 @@ func TestRenderConfigIncludesProviderWhenAPIKeyProvided(t *testing.T) {
 		WebhookToken:    "hook",
 		ProviderName:    "anthropic",
 		ProviderAPIKey:  "sk-test",
-		Platforms:       []PlatformBlock{testWeixinPlatform("wx-main", "")},
+		Platforms:       []platforms.Block{testWeixinPlatform("wx-main", "")},
 	}
 
-	got := renderConfig(cfg)
+	got := mustRender(t, cfg)
 
 	for _, want := range []string{
 		`[[projects.agent.providers]]`,
@@ -150,8 +155,8 @@ func TestRenderConfigIncludesProviderWhenAPIKeyProvided(t *testing.T) {
 	}
 }
 
-func TestRenderConfigIncludesTelegramPlatform(t *testing.T) {
-	cfg := RenderConfigInput{
+func TestRenderIncludesTelegramPlatform(t *testing.T) {
+	cfg := RenderInput{
 		DataDir:         "/Users/me/.cc-connect",
 		Workspace:       "/Users/me/home-assistant-workspace",
 		ProjectName:     "home",
@@ -160,10 +165,10 @@ func TestRenderConfigIncludesTelegramPlatform(t *testing.T) {
 		ManagementToken: "mgmt",
 		BridgeToken:     "bridge",
 		WebhookToken:    "hook",
-		Platforms: []PlatformBlock{
+		Platforms: []platforms.Block{
 			{
 				Type: "telegram",
-				Options: []PlatformOption{
+				Options: []platforms.Option{
 					{Key: "token", Value: "tg-token"},
 					{Key: "allow_from", Value: ""},
 				},
@@ -171,7 +176,7 @@ func TestRenderConfigIncludesTelegramPlatform(t *testing.T) {
 		},
 	}
 
-	got := renderConfig(cfg)
+	got := mustRender(t, cfg)
 
 	for _, want := range []string{
 		`type = "telegram"`,
@@ -183,23 +188,8 @@ func TestRenderConfigIncludesTelegramPlatform(t *testing.T) {
 	}
 }
 
-func TestOpenRouterClaudeCodeShellProfile(t *testing.T) {
-	profile := openrouterClaudeCodeProfile("sk-or", "", "")
-	block := buildClaudeCodeExportBlock(profile)
-
-	for _, want := range []string{
-		`ANTHROPIC_BASE_URL='https://openrouter.ai/api/v1'`,
-		`ANTHROPIC_AUTH_TOKEN='sk-or'`,
-		`ANTHROPIC_MODEL='anthropic/claude-sonnet-4'`,
-	} {
-		if !strings.Contains(block, want) {
-			t.Fatalf("block missing %q:\n%s", want, block)
-		}
-	}
-}
-
-func TestRenderConfigOmitsProviderWhenUsingShellEnvOnly(t *testing.T) {
-	cfg := RenderConfigInput{
+func TestRenderOmitsProviderWhenUsingShellEnvOnly(t *testing.T) {
+	cfg := RenderInput{
 		DataDir:         "/Users/me/.cc-connect",
 		Workspace:       "/Users/me/home-assistant-workspace",
 		ProjectName:     "home",
@@ -208,18 +198,18 @@ func TestRenderConfigOmitsProviderWhenUsingShellEnvOnly(t *testing.T) {
 		ManagementToken: "mgmt",
 		BridgeToken:     "bridge",
 		WebhookToken:    "hook",
-		Platforms:       []PlatformBlock{testWeixinPlatform("wx-main", "")},
+		Platforms:       []platforms.Block{testWeixinPlatform("wx-main", "")},
 	}
 
-	got := renderConfig(cfg)
+	got := mustRender(t, cfg)
 
 	if strings.Contains(got, `[[providers]]`) {
 		t.Fatalf("config should omit providers when only shell env is used:\n%s", got)
 	}
 }
 
-func TestRenderConfigIncludesOpenAICompatibleProviderOptions(t *testing.T) {
-	cfg := RenderConfigInput{
+func TestRenderIncludesOpenAICompatibleProviderOptions(t *testing.T) {
+	cfg := RenderInput{
 		DataDir:         "/Users/me/.cc-connect",
 		Workspace:       "/Users/me/home-assistant-workspace",
 		ProjectName:     "home",
@@ -232,10 +222,10 @@ func TestRenderConfigIncludesOpenAICompatibleProviderOptions(t *testing.T) {
 		ProviderAPIKey:  "sk-openai",
 		ProviderBaseURL: "https://api.openai.com/v1",
 		ProviderModel:   "gpt-4.1",
-		Platforms:       []PlatformBlock{testWeixinPlatform("wx-main", "")},
+		Platforms:       []platforms.Block{testWeixinPlatform("wx-main", "")},
 	}
 
-	got := renderConfig(cfg)
+	got := mustRender(t, cfg)
 
 	for _, want := range []string{
 		`[[projects.agent.providers]]`,
@@ -254,69 +244,33 @@ func TestRenderConfigIncludesOpenAICompatibleProviderOptions(t *testing.T) {
 	}
 }
 
-func TestConfigureLLMReturnsProviderForClaudeCodePreset(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
-	input := strings.NewReader("3\nsk-openai\n\n\n")
-	var out bytes.Buffer
-	p := prompt{in: bufio.NewReader(input), out: &out}
-
-	got := configureLLM(&p, "claudecode")
-
-	if got.Name != "openai" {
-		t.Fatalf("provider name = %q, want openai", got.Name)
+func TestValidateAgentMode(t *testing.T) {
+	tests := []struct {
+		agent string
+		mode  string
+		ok    bool
+	}{
+		{"claudecode", "default", true},
+		{"claudecode", "plan", true},
+		{"claudecode", "force", false},
+		{"cursor", "ask", true},
+		{"cursor", "force", true},
+		{"cursor", "acceptEdits", false},
 	}
-	if got.APIKey != "sk-openai" {
-		t.Fatalf("provider api key = %q, want sk-openai", got.APIKey)
-	}
-	if got.BaseURL != "https://api.openai.com/v1" {
-		t.Fatalf("provider base url = %q, want default OpenAI base URL", got.BaseURL)
-	}
-	if got.Model != "gpt-4.1" {
-		t.Fatalf("provider model = %q, want gpt-4.1", got.Model)
-	}
-}
 
-func TestFirstBoundWeixinAllowFrom(t *testing.T) {
-	config := `
-[[projects.platforms]]
-type = "weixin"
-[projects.platforms.options]
-allow_from = ""
-
-[[projects.platforms]]
-type = "weixin"
-[projects.platforms.options]
-allow_from = "admin@im.wechat"
-`
-
-	got := firstBoundWeixinAllowFrom(config)
-
-	if got != "admin@im.wechat" {
-		t.Fatalf("expected first non-empty allow_from, got %q", got)
+	for _, tt := range tests {
+		err := ValidateAgentMode(tt.agent, tt.mode)
+		if tt.ok && err != nil {
+			t.Fatalf("ValidateAgentMode(%q, %q) unexpected error: %v", tt.agent, tt.mode, err)
+		}
+		if !tt.ok && err == nil {
+			t.Fatalf("ValidateAgentMode(%q, %q) expected error", tt.agent, tt.mode)
+		}
 	}
 }
 
-func TestFirstConfiguredAdminFrom(t *testing.T) {
-	config := `
-[[projects]]
-name = "home"
-admin_from = "owner@im.wechat"
-
-[[projects.platforms]]
-type = "weixin"
-[projects.platforms.options]
-allow_from = "admin@im.wechat"
-`
-
-	got := firstConfiguredAdminFrom(config)
-
-	if got != "owner@im.wechat" {
-		t.Fatalf("expected configured admin_from, got %q", got)
-	}
-}
-
-func TestApplyAdminUserToConfigUpdatesProjectAdminRole(t *testing.T) {
-	config := `
+func TestApplyAdminUserUpdatesProjectAdminRole(t *testing.T) {
+	configText := `
 [[projects]]
 name = "home"
 admin_from = ""
@@ -329,7 +283,7 @@ disabled_commands = []
 user_ids = ["*"]
 `
 
-	got := applyAdminUserToConfig(config, "admin@im.wechat")
+	got := ApplyAdminUser(configText, "admin@im.wechat")
 
 	for _, want := range []string{
 		`admin_from = "admin@im.wechat"`,
@@ -343,8 +297,8 @@ user_ids = ["*"]
 	}
 }
 
-func TestApplyAdminUserToConfigInsertsMissingProjectAdminRole(t *testing.T) {
-	config := `
+func TestApplyAdminUserInsertsMissingProjectAdminRole(t *testing.T) {
+	configText := `
 [[projects]]
 name = "home"
 admin_from = ""
@@ -356,7 +310,7 @@ default_role = "member"
 user_ids = ["*"]
 `
 
-	got := applyAdminUserToConfig(config, "admin@im.wechat")
+	got := ApplyAdminUser(configText, "admin@im.wechat")
 
 	for _, want := range []string{
 		`admin_from = "admin@im.wechat"`,
@@ -374,53 +328,83 @@ user_ids = ["*"]
 	}
 }
 
-func TestValidateAgentMode(t *testing.T) {
-	tests := []struct {
-		agent string
-		mode  string
-		ok    bool
-	}{
-		{"claudecode", "default", true},
-		{"claudecode", "plan", true},
-		{"claudecode", "force", false},
-		{"cursor", "ask", true},
-		{"cursor", "force", true},
-		{"cursor", "acceptEdits", false},
-	}
+func TestFirstBoundWeixinAllowFrom(t *testing.T) {
+	configText := `
+[[projects.platforms]]
+type = "weixin"
+[projects.platforms.options]
+allow_from = ""
 
-	for _, tt := range tests {
-		err := validateAgentMode(tt.agent, tt.mode)
-		if tt.ok && err != nil {
-			t.Fatalf("validateAgentMode(%q, %q) unexpected error: %v", tt.agent, tt.mode, err)
-		}
-		if !tt.ok && err == nil {
-			t.Fatalf("validateAgentMode(%q, %q) expected error", tt.agent, tt.mode)
-		}
+[[projects.platforms]]
+type = "weixin"
+[projects.platforms.options]
+allow_from = "admin@im.wechat"
+`
+
+	got := FirstBoundWeixinAllowFrom(configText)
+
+	if got != "admin@im.wechat" {
+		t.Fatalf("expected first non-empty allow_from, got %q", got)
 	}
 }
 
-func TestWriteWorkspaceFilesIncludesDefaultSkills(t *testing.T) {
-	dir := t.TempDir()
+func TestFirstConfiguredAdminFrom(t *testing.T) {
+	configText := `
+[[projects]]
+name = "home"
+admin_from = "owner@im.wechat"
 
-	if err := writeWorkspaceFiles(dir); err != nil {
-		t.Fatalf("writeWorkspaceFiles() error: %v", err)
+[[projects.platforms]]
+type = "weixin"
+[projects.platforms.options]
+allow_from = "admin@im.wechat"
+`
+
+	got := FirstConfiguredAdminFrom(configText)
+
+	if got != "owner@im.wechat" {
+		t.Fatalf("expected configured admin_from, got %q", got)
+	}
+}
+
+func goldenRenderInput() RenderInput {
+	return RenderInput{
+		DataDir:                "/Users/me/.cc-connect",
+		Workspace:              "/Users/me/home-assistant-workspace",
+		ProjectName:            "home",
+		AgentType:              "claudecode",
+		AgentMode:              "auto",
+		ManagementToken:        "mgmt-token",
+		BridgeToken:            "bridge-token",
+		WebhookToken:           "hook-token",
+		ProviderName:           "openai",
+		ProviderAPIKey:         "sk-openai",
+		ProviderBaseURL:        "https://api.openai.com/v1",
+		ProviderModel:          "gpt-4.1",
+		Platforms:              []platforms.Block{testWeixinPlatform("wx-main", "")},
+		MemberDisabledCommands: permissions.MemberDisabledCommands("family-remind"),
+	}
+}
+
+func TestRenderGoldenOpenAI(t *testing.T) {
+	got := mustRender(t, goldenRenderInput())
+	want, err := os.ReadFile(filepath.Join("..", "testdata", "render_config_openai.golden.toml"))
+	if err != nil {
+		t.Fatalf("read golden file: %v", err)
+	}
+	if got != string(want) {
+		t.Fatalf("rendered config differs from golden file\n--- got ---\n%s--- want ---\n%s", got, want)
+	}
+}
+
+func TestWriteRenderGoldenOpenAI(t *testing.T) {
+	if os.Getenv("WRITE_GOLDEN") != "1" {
+		t.Skip("set WRITE_GOLDEN=1 to regenerate golden file")
 	}
 
-	for _, rel := range []string{
-		"CLAUDE.md",
-		"HOME.md",
-		"HEARTBEAT.md",
-		"VERSION",
-		"members.md",
-		"devices.md",
-		"tasks.md",
-		"skills/cc-connect/SKILL.md",
-		"skills/home-routines/SKILL.md",
-		"skills/skill-creator/SKILL.md",
-		"skills/skill-maintenance/SKILL.md",
-	} {
-		if _, err := os.Stat(filepath.Join(dir, rel)); err != nil {
-			t.Fatalf("expected workspace file %s: %v", rel, err)
-		}
+	got := mustRender(t, goldenRenderInput())
+	path := filepath.Join("..", "testdata", "render_config_openai.golden.toml")
+	if err := os.WriteFile(path, []byte(got), 0o644); err != nil {
+		t.Fatalf("write golden file: %v", err)
 	}
 }

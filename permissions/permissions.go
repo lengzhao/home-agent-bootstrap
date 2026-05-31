@@ -1,22 +1,23 @@
-package main
+package permissions
 
 import (
 	"fmt"
 	"io"
+	"os"
 	"strconv"
 	"strings"
 )
 
-const defaultPermissionTemplate = "family-remind"
+const DefaultTemplate = "family-remind"
 
-type permissionTemplate struct {
+type Template struct {
 	ID          string
 	DisplayName string
 	Description string
 	Disabled    []string
 }
 
-var permissionTemplates = []permissionTemplate{
+var templates = []Template{
 	{
 		ID:          "admin-only",
 		DisplayName: "仅管理员可用",
@@ -45,44 +46,57 @@ var permissionTemplates = []permissionTemplate{
 	},
 }
 
-func permissionTemplateByID(id string) (permissionTemplate, bool) {
-	for _, preset := range permissionTemplates {
+func TemplateByID(id string) (Template, bool) {
+	for _, preset := range templates {
 		if preset.ID == id {
 			return preset, true
 		}
 	}
-	return permissionTemplate{}, false
+	return Template{}, false
 }
 
-func printPermissionTemplateCatalog(out io.Writer) {
+func PrintCatalog(out io.Writer) {
 	fmt.Fprintln(out, "\n选择家庭权限模板：")
-	for i, preset := range permissionTemplates {
+	for i, preset := range templates {
 		fmt.Fprintf(out, "  %d) %s (%s)\n", i+1, preset.DisplayName, preset.ID)
 		fmt.Fprintf(out, "     %s\n", preset.Description)
 	}
 	fmt.Fprintln(out, "\n默认 3 为 family-remind。")
 }
 
-func parsePermissionTemplateChoice(raw string) (permissionTemplate, error) {
-	raw = stringsTrimDefault(raw, "3")
+func ParseChoice(raw string) (Template, error) {
+	raw = trimDefault(raw, "3")
 	idx, err := strconv.Atoi(raw)
-	if err != nil || idx < 1 || idx > len(permissionTemplates) {
-		return permissionTemplate{}, fmt.Errorf("无效权限模板序号 %q", raw)
+	if err != nil || idx < 1 || idx > len(templates) {
+		return Template{}, fmt.Errorf("无效权限模板序号 %q", raw)
 	}
-	return permissionTemplates[idx-1], nil
+	return templates[idx-1], nil
 }
 
-func memberDisabledCommands(templateID string) []string {
-	if preset, ok := permissionTemplateByID(templateID); ok {
+func MemberDisabledCommands(templateID string) []string {
+	if preset, ok := TemplateByID(templateID); ok {
 		return append([]string(nil), preset.Disabled...)
 	}
-	if preset, ok := permissionTemplateByID(defaultPermissionTemplate); ok {
+	if preset, ok := TemplateByID(DefaultTemplate); ok {
 		return append([]string(nil), preset.Disabled...)
 	}
 	return []string{"shell", "show", "dir", "restart", "upgrade", "commands"}
 }
 
-func stringsTrimDefault(raw, fallback string) string {
+func ChoiceDefaultFromEnv() string {
+	id := strings.TrimSpace(os.Getenv("PERMISSION_TEMPLATE"))
+	if id == "" {
+		return "3"
+	}
+	for i, preset := range templates {
+		if preset.ID == id {
+			return strconv.Itoa(i + 1)
+		}
+	}
+	return "3"
+}
+
+func trimDefault(raw, fallback string) string {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return fallback

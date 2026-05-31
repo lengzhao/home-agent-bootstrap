@@ -1,4 +1,4 @@
-package main
+package config
 
 import (
 	"os"
@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func TestAnalyzeConfigDetectsLegacyProviders(t *testing.T) {
+func TestAnalyzeDetectsLegacyProviders(t *testing.T) {
 	content := `
 [[providers]]
 name = "openai"
@@ -22,7 +22,7 @@ provider = "openai"
 provider_refs = ["openai"]
 `
 
-	findings := analyzeConfig(content)
+	findings := Analyze(content)
 
 	if !containsFinding(findings, "WARN", "旧版顶层 [[providers]]") {
 		t.Fatalf("expected legacy provider warning, got %#v", findings)
@@ -35,7 +35,7 @@ provider_refs = ["openai"]
 	}
 }
 
-func TestAnalyzeConfigAcceptsProjectProviders(t *testing.T) {
+func TestAnalyzeAcceptsProjectProviders(t *testing.T) {
 	content := `
 [projects.agent]
 type = "claudecode"
@@ -48,7 +48,7 @@ name = "openai"
 api_key = "sk-openai"
 `
 
-	findings := analyzeConfig(content)
+	findings := Analyze(content)
 
 	if containsFinding(findings, "FAIL", "") {
 		t.Fatalf("unexpected failure findings: %#v", findings)
@@ -58,7 +58,7 @@ api_key = "sk-openai"
 	}
 }
 
-func TestMigrateLegacyConfigMovesProviders(t *testing.T) {
+func TestMigrateLegacyMovesProviders(t *testing.T) {
 	content := `
 [[providers]]
 name = "openai"
@@ -77,9 +77,9 @@ provider = "openai"
 provider_refs = ["openai"]
 `
 
-	got, changed, err := migrateLegacyConfig(content)
+	got, changed, err := MigrateLegacy(content)
 	if err != nil {
-		t.Fatalf("migrateLegacyConfig() error: %v", err)
+		t.Fatalf("MigrateLegacy() error: %v", err)
 	}
 	if !changed {
 		t.Fatal("expected migration to change config")
@@ -106,17 +106,17 @@ provider_refs = ["openai"]
 }
 
 func TestPlatformPresetsMatchDocs(t *testing.T) {
-	docPath := filepath.Join("docs", "platforms.md")
+	docPath := filepath.Join("..", "docs", "platforms.md")
 	content, err := os.ReadFile(docPath)
 	if err != nil {
 		t.Fatalf("read docs/platforms.md: %v", err)
 	}
 
-	docTypes, err := platformTypesFromDocs(string(content))
+	docTypes, err := PlatformTypesFromDocs(string(content))
 	if err != nil {
-		t.Fatalf("platformTypesFromDocs() error: %v", err)
+		t.Fatalf("PlatformTypesFromDocs() error: %v", err)
 	}
-	codeTypes := platformTypesFromPresets()
+	codeTypes := PlatformTypesFromPresets()
 
 	if len(docTypes) != len(codeTypes) {
 		t.Fatalf("platform count mismatch docs=%d code=%d", len(docTypes), len(codeTypes))
@@ -128,55 +128,12 @@ func TestPlatformPresetsMatchDocs(t *testing.T) {
 	}
 }
 
-func TestWriteRenderConfigGoldenOpenAI(t *testing.T) {
-	if os.Getenv("WRITE_GOLDEN") != "1" {
-		t.Skip("set WRITE_GOLDEN=1 to regenerate golden file")
-	}
-
-	cfg := goldenRenderConfigInput()
-	got := renderConfig(cfg)
-	path := filepath.Join("testdata", "render_config_openai.golden.toml")
-	if err := os.WriteFile(path, []byte(got), 0o644); err != nil {
-		t.Fatalf("write golden file: %v", err)
-	}
-}
-
-func TestRenderConfigGoldenOpenAI(t *testing.T) {
-	got := renderConfig(goldenRenderConfigInput())
-	want, err := os.ReadFile(filepath.Join("testdata", "render_config_openai.golden.toml"))
-	if err != nil {
-		t.Fatalf("read golden file: %v", err)
-	}
-	if got != string(want) {
-		t.Fatalf("rendered config differs from golden file\n--- got ---\n%s--- want ---\n%s", got, want)
-	}
-}
-
-func goldenRenderConfigInput() RenderConfigInput {
-	return RenderConfigInput{
-		DataDir:                "/Users/me/.cc-connect",
-		Workspace:              "/Users/me/home-assistant-workspace",
-		ProjectName:            "home",
-		AgentType:              "claudecode",
-		AgentMode:              "auto",
-		ManagementToken:        "mgmt-token",
-		BridgeToken:            "bridge-token",
-		WebhookToken:           "hook-token",
-		ProviderName:           "openai",
-		ProviderAPIKey:         "sk-openai",
-		ProviderBaseURL:        "https://api.openai.com/v1",
-		ProviderModel:          "gpt-4.1",
-		Platforms:              []PlatformBlock{testWeixinPlatform("wx-main", "")},
-		MemberDisabledCommands: memberDisabledCommands("family-remind"),
-	}
-}
-
-func containsFinding(findings []configFinding, level, substr string) bool {
-	for _, finding := range findings {
-		if finding.level != level {
+func containsFinding(findings []finding, level, substr string) bool {
+	for _, item := range findings {
+		if item.level != level {
 			continue
 		}
-		if substr == "" || strings.Contains(finding.message, substr) {
+		if substr == "" || strings.Contains(item.message, substr) {
 			return true
 		}
 	}

@@ -47,6 +47,7 @@ flowchart LR
 - [x] P1 Heartbeat 启用向导：首次对话后提示填写 `session_key` 并取消注释
 - [x] P1 丰富 `members.md` / `devices.md` / `tasks.md` 示例，降低首次填写门槛
 - [x] P1 补家庭场景技能包：提醒、待办、账单周期、设备控制前确认
+- [x] P2 workspace 独立同步命令 sync-workspace / workspace-status
 - [ ] P2 增加 `skills/` 模板校验：确保 frontmatter 和目录名一致
 - [ ] P2 提供“示例家庭助手”演示 workspace，供新用户参考
 
@@ -80,20 +81,18 @@ flowchart LR
 
 ---
 
-## 前 10 个建议任务
+## 前 10 个建议任务（P2 优先）
 
-按推荐执行顺序排列：
-
-1. P0 强化 `doctor`
-2. P0 旧配置迁移提示（`[[providers]]` → `[[projects.agent.providers]]`）
-3. P0 模板 golden test
-4. P0 平台列表一致性测试
-5. P0 发布第一个稳定 Release
-6. P1 Heartbeat 启用向导
-7. P1 workspace 模板版本提示
-8. P1 家庭场景技能包
-9. P1 bootstrap 权限模板
-10. P1 非交互 bootstrap 预设
+1. P2 token 轮换 helper
+2. P2 doctor 端口暴露检查
+3. P2 skills 模板校验
+4. P2 webhook / Bridge 集成示例
+5. P2 跟踪 cc-connect changelog 更新平台与 Provider 预设
+6. P2 示例家庭助手演示 workspace
+7. P2 审计日志巡检 skill
+8. P2 bootstrap 集成测试（非交互主路径）
+9. P2 配置 TOML 结构化解析替代字符串编辑
+10. P2 可选 CLI flags 补充 env 预设
 
 ---
 
@@ -139,5 +138,6 @@ flowchart LR
 
 - [平台与 LLM 选择设计](docs/plans/2026-05-24-platform-llm-selection-design.md)
 - [Project Hardening 设计](docs/plans/2026-05-31-project-hardening-design.md)
+- [模块拆分设计](docs/plans/2026-05-31-module-split-design.md)
 - [配置说明](docs/configuration.md)
 - [安全建议](docs/security.md)

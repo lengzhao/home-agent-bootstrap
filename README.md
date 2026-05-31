@@ -148,6 +148,24 @@ docs/
 - Management、Bridge、Webhook token
 - Claude/Cursor 登录凭据
 
+## 代码结构
+
+根目录仅保留 `main.go`（入口与 `embed`），业务逻辑按模块拆分：
+
+| 包 | 职责 |
+|---|---|
+| `bootstrap/` | CLI 命令分发、bootstrap 编排、安装依赖、微信绑定 |
+| `config/` | 配置渲染、doctor、migrate、admin 角色写入 |
+| `platforms/` | cc-connect 平台预设与交互配置 |
+| `providers/` | Claude Code LLM Provider 预设 |
+| `permissions/` | 家庭权限模板 |
+| `shellenv/` | Claude Code 第三方 LLM shell 环境变量 |
+| `workspacesync/` | 工作区模板版本、sync-workspace / workspace-status |
+| `prompt/` | 交互式问答 |
+| `cmdutil/` | 通用工具函数 |
+
+模板目录 `workspace/`、`templates/` 仍位于仓库根目录，由 `main.go` 嵌入二进制。
+
 ## CI 和发布
 
 仓库包含 GitHub Actions：
